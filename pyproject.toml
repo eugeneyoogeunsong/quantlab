@@ -9,8 +9,14 @@ description = "A 5-layer algorithmic trading research framework with an executab
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Eugene Song", email = "ygsong1004@gmail.com" }]
-keywords = ["backtesting", "quantitative-finance", "algorithmic-trading", "factor-investing"]
+authors = [
+    { name = "Eugene Song", email = "ygsong1004@gmail.com" },
+    { name = "Adrian" },
+]
+keywords = [
+    "backtesting", "quantitative-finance", "algorithmic-trading",
+    "factor-investing", "options-pricing", "derivatives", "portfolio-optimisation",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Financial and Insurance Industry",

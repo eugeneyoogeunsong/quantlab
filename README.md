@@ -23,7 +23,7 @@ trustworthy.
 git clone https://github.com/eugeneyoogeunsong/quantlab.git
 cd quantlab
 pip install -e ".[dev]"
-pytest                    # 90 tests, fully offline
+pytest                    # 156 tests, fully offline
 ```
 
 Python 3.10+. Core dependencies: pandas, numpy, scipy, yfinance, pyarrow.
@@ -73,6 +73,13 @@ build_report(pr, "report.html")
 | 3. Backtest | `quantlab.backtest` | Engine, costs, metrics, validation | Performance + risk metrics |
 | 4. Portfolio | `quantlab.portfolio` | Sizing, exposure and drawdown limits | Risk-adjusted positions |
 | 5. Execution | `quantlab.execution` | Paper broker, order generation, monitoring | Orders + health alerts |
+
+Two further modules sit alongside the five layers:
+
+| Module | Responsibility |
+|---|---|
+| `quantlab.derivatives` | Options pricing — analytic, lattice, PDE and Monte Carlo, plus implied volatility |
+| `quantlab.portfolio.optimisation` | Markowitz mean-variance with CAPM/EWMA inputs |
 
 The blueprint's warning — *most people fail because they skip layers 3–5* — is
 the reason layers 3, 4 and 5 are the largest part of this codebase, not the
@@ -226,7 +233,7 @@ re-runs at escalating cost levels and reports the break-even.
 ## Tests
 
 ```bash
-pytest                    # 90 tests
+pytest                    # 156 tests
 pytest -m "not slow"      # skip the Monte Carlo null tests
 ```
 
@@ -271,16 +278,24 @@ quantlab/
 │   ├── data/          Layer 1 — loaders, universe, integrity checks
 │   ├── research/      Layer 2 — features, strategies
 │   ├── backtest/      Layer 3 — engine, costs, metrics, validation
-│   ├── portfolio/     Layer 4 — sizing, risk limits
+│   ├── portfolio/     Layer 4 — sizing, risk limits, mean-variance optimisation
 │   ├── execution/     Layer 5 — broker, monitoring
+│   ├── derivatives/   Options pricing — 4 independent methods + implied vol
 │   ├── qa/            The checklist, executable
 │   ├── pipeline.py    Wires all five layers together
 │   ├── report.py      Standalone HTML reports
 │   └── cli.py         backtest / compare / orders
-├── tests/             90 tests incl. null-hypothesis suite
-├── docs/              QA_CHECKLIST.md, STRATEGIES.md
+├── tests/             156 tests incl. null-hypothesis suite
+├── docs/              QA_CHECKLIST.md, STRATEGIES.md, DERIVATIVES.md
 └── examples/
 ```
+
+## Credits
+
+The derivatives pricing modules and the mean-variance optimiser are derived
+from **Adrian's** (`Adrian.ph689`) independent quantitative finance projects,
+contributed with permission. See [CREDITS.md](CREDITS.md) for the full
+attribution, what changed in the port, and references.
 
 ## Contributing
 

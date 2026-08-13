@@ -143,10 +143,40 @@ def kelly_fraction(returns: pd.Series, window: int = 252,
     return k.clip(0, cap).fillna(0.0)
 
 
+def mean_variance(signal_mask: pd.DataFrame, prices: pd.DataFrame,
+                  objective: str = "sharpe", inputs: str = "ewma",
+                  lookback: int = 252, max_weight: float = 0.40,
+                  **kwargs) -> pd.DataFrame:
+    """Markowitz mean-variance weights, restricted to the selected names.
+
+    Delegates to `portfolio.optimisation`. Unlike the heuristics above this
+    needs an expected-return estimate, which is the least reliable input in
+    quantitative finance -- see that module's docstring before trusting it.
+
+    `objective='variance'` sidesteps the problem by ignoring expected returns
+    entirely, and historically tends to do better out of sample.
+    """
+    from .optimisation import MeanVarianceOptimiser
+
+    opt = MeanVarianceOptimiser(
+        lookback=lookback, objective=objective, inputs=inputs,
+        max_weight=max_weight,
+        **{k: v for k, v in kwargs.items()
+           if k in {"rebalance", "risk_free", "ewma_alpha", "min_weight"}},
+    )
+    raw = opt.generate_weights(prices)
+    # Respect the strategy's selection: zero out anything not signalled.
+    masked = raw.where(signal_mask.astype(bool), 0.0)
+    total = masked.sum(axis=1)
+    return masked.div(total.replace(0, np.nan), axis=0).fillna(0.0)
+
+
 SIZERS = {
     "equal_weight": "equal_weight",
     "inverse_vol": "inverse_volatility",
     "risk_parity": "risk_parity",
+    "mean_variance": "mean_variance",
+    "min_variance": "mean_variance (objective='variance')",
 }
 
 
@@ -159,4 +189,8 @@ def apply_sizing(signal_mask: pd.DataFrame, prices: pd.DataFrame,
         return inverse_volatility(signal_mask, prices, **kwargs)
     if method == "risk_parity":
         return risk_parity(signal_mask, prices, **kwargs)
+    if method == "mean_variance":
+        return mean_variance(signal_mask, prices, objective="sharpe", **kwargs)
+    if method == "min_variance":
+        return mean_variance(signal_mask, prices, objective="variance", **kwargs)
     raise KeyError(f"Unknown sizing method {method!r}. Available: {sorted(SIZERS)}")
