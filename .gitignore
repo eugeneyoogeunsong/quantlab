@@ -1,0 +1,40 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# quantlab runtime artefacts
+.cache/
+reports/
+blotters/
+*.parquet
+
+# Credentials -- never commit these. yfinance needs no key, but a paid
+# vendor adapter will, and that is exactly when this matters.
+.env
+.env.*
+*.key
+*.pem
+secrets.yml
+credentials.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
