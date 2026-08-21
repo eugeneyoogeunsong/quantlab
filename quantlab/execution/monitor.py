@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 5: monitoring, i.e., answering "how do you know when a strategy is dying?"
 
 That question appears in the blueprint's Q&A section, and it is the hardest one,

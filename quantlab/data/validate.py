@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 1, data integrity validators (QA Checklist Section A).
 
 Each function returns a `Check` and nothing raises: the QA report should surface

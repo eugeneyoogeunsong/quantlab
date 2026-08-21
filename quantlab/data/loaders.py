@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 1, data: vendor-agnostic price loading backed by an on-disk cache.
 
 Design note

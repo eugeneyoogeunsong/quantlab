@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """QA checklist behaviour, validation machinery, strategies, and execution."""
 
 from __future__ import annotations

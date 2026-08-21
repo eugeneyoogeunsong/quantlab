@@ -1,3 +1,7 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Ported from Adrian's (Adrian.ph689) independent work, used with permission;
+# see CREDITS.md. Independent side project. MIT licensed; see LICENSE.
+
 """PDE pricing by Crank-Nicolson finite differences.
 
 Original implementations by Adrian (Adrian.ph689), 2025. Refactored into

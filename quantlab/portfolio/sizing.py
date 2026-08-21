@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 4: position sizing (QA Section E).
 
 A signal says *what* to hold; sizing says *how much*, and it is usually the

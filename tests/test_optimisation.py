@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Mean-variance optimisation tests.
 
 The optimiser is checked against analytically-known answers wherever one

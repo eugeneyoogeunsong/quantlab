@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Command-line interface: one strategy in full, many strategies quickly, or today's orders.
 
     python -m quantlab.cli backtest --strategy xs_momentum --universe sector_etfs

@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Null-hypothesis tests: strategies must find NOTHING in pure noise.
 
 This is the strongest single check in the suite. Look-ahead bias can hide from

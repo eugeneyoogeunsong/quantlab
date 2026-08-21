@@ -14,6 +14,10 @@ attached.** `Pipeline.run()` returns performance and the checklist verdict in th
 same object, and `qa.gate()` raises on any blocking failure. Looking at a Sharpe
 ratio here without also seeing whether it is trustworthy is deliberately awkward.
 
+Built by **Eugene (Yoogeun) Song** ([LinkedIn](https://www.linkedin.com/in/yoogeunsong))
+as an independent side project: a hobby, written in my own time, out of curiosity
+about how much of a backtest survives honest scrutiny.
+
 ---
 
 ## Install
@@ -303,6 +307,20 @@ word that a signal is causal, including mine.
 
 If you find a bug in the leakage detection, that is the most valuable possible
 bug report. Open an issue.
+
+## Author and copyright
+
+quantlab is written and maintained by **Eugene (Yoogeun) Song**
+([LinkedIn](https://www.linkedin.com/in/yoogeunsong)). It is an independent side
+project: a hobby, built in my own time and for my own curiosity, not work carried
+out for or on behalf of any employer, university, or client. Nothing in this
+repository represents the position of any institution I am affiliated with.
+
+Copyright © 2026 Eugene (Yoogeun) Song. Released under the
+[MIT License](LICENSE): use it, fork it, build on it, provided the copyright
+notice and permission notice travel with it. The derivatives pricing and
+mean-variance optimisation modules remain copyright © 2025 Adrian, contributed
+with permission under the same terms (see [CREDITS.md](CREDITS.md)).
 
 ## Disclaimer
 

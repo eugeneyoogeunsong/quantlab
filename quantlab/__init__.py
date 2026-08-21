@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """quantlab: an algorithmic trading research framework organised around what it refuses to do.
 
 A backtest is not evidence; it is a hypothesis with a flattering chart attached. quantlab

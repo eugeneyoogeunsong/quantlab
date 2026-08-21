@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 5, reporting (QA Section F).
 
 One self-contained HTML file: equity curve, drawdowns, monthly table, risk metrics,

@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 3: performance and risk metrics (QA Section F).
 
 Includes the deflated Sharpe ratio, which is the metric most likely to change

@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """The Backtest QA Checklist, as executable code.
 
 Sections A to G of the source checklist, each mapped to a check that either

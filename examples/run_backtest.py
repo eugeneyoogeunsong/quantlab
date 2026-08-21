@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """End-to-end example: data -> signals -> backtest -> QA -> report.
 
     python examples/run_backtest.py

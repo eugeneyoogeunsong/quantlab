@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Shared fixtures. All synthetic -- tests must not depend on a network call."""
 
 from __future__ import annotations

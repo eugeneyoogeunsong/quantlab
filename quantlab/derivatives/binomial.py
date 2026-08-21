@@ -1,3 +1,7 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Ported from Adrian's (Adrian.ph689) independent work, used with permission;
+# see CREDITS.md. Independent side project. MIT licensed; see LICENSE.
+
 """Binomial lattice pricing (Cox-Ross-Rubinstein).
 
 Original implementations by Adrian (Adrian.ph689), 2025, drawing on Shreve,

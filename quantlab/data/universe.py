@@ -1,3 +1,6 @@
+# quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
+# Independent side project. MIT licensed; see LICENSE.
+
 """Layer 1, universe definition.
 
 QA Section A: "Universe definition is explicit (what symbols, when, and why)."
