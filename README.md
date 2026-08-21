@@ -11,9 +11,8 @@ to remember.
 
 The organising idea: **a backtest is not a result until it has a QA report
 attached.** `Pipeline.run()` returns performance and the checklist verdict in the
-same object, and `qa.gate()` raises on any blocking failure. It is deliberately
-awkward to look at a Sharpe ratio here without also seeing whether it is
-trustworthy.
+same object, and `qa.gate()` raises on any blocking failure. Looking at a Sharpe
+ratio here without also seeing whether it is trustworthy is deliberately awkward.
 
 ---
 
@@ -78,12 +77,12 @@ Two further modules sit alongside the five layers:
 
 | Module | Responsibility |
 |---|---|
-| `quantlab.derivatives` | Options pricing — analytic, lattice, PDE and Monte Carlo, plus implied volatility |
+| `quantlab.derivatives` | Options pricing (analytic, lattice, PDE and Monte Carlo), plus implied volatility |
 | `quantlab.portfolio.optimisation` | Markowitz mean-variance with CAPM/EWMA inputs |
 
-The blueprint's warning — *most people fail because they skip layers 3–5* — is
-the reason layers 3, 4 and 5 are the largest part of this codebase, not the
-smallest.
+The blueprint issues one warning above all others: most people fail because they
+skip layers 3 to 5. That is precisely why layers 3, 4 and 5 are the largest part
+of this codebase, not the smallest.
 
 ---
 
@@ -101,18 +100,18 @@ effective = held.shift(cfg.execution_lag)
 
 `BacktestConfig` refuses `execution_lag=0` with an error. Nothing else in the
 library shifts a signal. If a strategy shifts as well, the result is a double
-lag — worse performance, never better, so the failure mode is conservative.
+lag: worse performance, never better, so the failure mode is conservative.
 
 Four independent tests defend this:
 
-1. **Truncation** — recompute every feature on history cut to 70% and require
+1. **Truncation:** recompute every feature on history cut to 70% and require
    identical values on the overlap. Catches `bfill()`, `rolling(center=True)`,
    and full-sample scaling.
-2. **Correlation** — `corr(weight_t, return_t)` must stay below 0.10. Real daily
-   alpha sits around 0.01–0.05; leakage sits above 0.3.
-3. **Perfect foresight** — a strategy that holds tomorrow's best asset must be
+2. **Correlation:** `corr(weight_t, return_t)` must stay below 0.10. Real daily
+   alpha sits around 0.01 to 0.05; leakage sits above 0.3.
+3. **Perfect foresight:** a strategy that holds tomorrow's best asset must be
    caught. If the detector misses it, the detector is broken.
-4. **Null hypothesis** — every strategy is run on 40 zero-drift random walks.
+4. **Null hypothesis:** every strategy is run on 40 zero-drift random walks.
    Anything that reliably profits there is finding structure that does not
    exist. (`tests/test_null_hypothesis.py`)
 
@@ -140,16 +139,16 @@ and `quantlab/data/validate.py`:
 
 | Section | Checks |
 |---|---|
-| **A — Data Integrity** | adjustment, index sanity, calendar gaps, NaN density, bad ticks, survivorship, history length |
-| **B — Bias + Leakage** | execution lag, weight causality, feature causality, rebalance timing |
-| **C — Validation** | walk-forward OOS, parameter sensitivity, regime coverage, benchmark, deflated Sharpe |
-| **D — Trading Reality** | costs applied, turnover sanity, execution spec |
-| **E — Risk & Portfolio** | position/exposure/drawdown limits, with a post-hoc breach audit |
-| **F — Reporting** | required metrics present, sample adequacy vs. minimum track record |
-| **G — Robustness triad** | does it survive costs **and** OOS **and** parameter variation? |
+| **A: Data Integrity** | adjustment, index sanity, calendar gaps, NaN density, bad ticks, survivorship, history length |
+| **B: Bias + Leakage** | execution lag, weight causality, feature causality, rebalance timing |
+| **C: Validation** | walk-forward OOS, parameter sensitivity, regime coverage, benchmark, deflated Sharpe |
+| **D: Trading Reality** | costs applied, turnover sanity, execution spec |
+| **E: Risk & Portfolio** | position/exposure/drawdown limits, with a post-hoc breach audit |
+| **F: Reporting** | required metrics present, sample adequacy vs. minimum track record |
+| **G: Robustness triad** | does it survive costs **and** OOS **and** parameter variation? |
 
 Three statuses. `pass` and `warn` let the run proceed; `fail` blocks it. A
-`ZeroCost` model is a **failure**, not a warning — "I forgot to add costs" and
+`ZeroCost` model is a **failure**, not a warning: "I forgot to add costs" and
 "costs are zero" produce identical numbers, and only one of them is a decision.
 
 Survivorship bias is always at least a warning when the universe is a static
@@ -165,11 +164,11 @@ which is which.
 
 | Strategy | Signal | Evidence |
 |---|---|---|
-| `xs_momentum` | 12-1 relative return, top N | **Strong** — Jegadeesh & Titman (1993), 30+ years of replication |
-| `ts_momentum` | Own 12-month return > 0 | **Strong** — Moskowitz, Ooi & Pedersen (2012), 58 markets |
+| `xs_momentum` | 12-1 relative return, top N | **Strong:** Jegadeesh & Titman (1993), 30+ years of replication |
+| `ts_momentum` | Own 12-month return > 0 | **Strong:** Moskowitz, Ooi & Pedersen (2012), 58 markets |
 | `low_vol` | Lowest trailing volatility | **Strong** risk-adjusted, **weak** absolute |
-| `mean_reversion` | Short-horizon z-score reversal | **Moderate** — robust gross, often negative after costs |
-| `dual_momentum` | Relative rank + absolute gate | **Moderate** — components strong, specific recipe less so |
+| `mean_reversion` | Short-horizon z-score reversal | **Moderate:** robust gross, often negative after costs |
+| `dual_momentum` | Relative rank + absolute gate | **Moderate:** components strong, specific recipe less so |
 | `buy_and_hold` | Equal weight, always | Benchmark |
 
 Adding your own means implementing one method:
@@ -206,9 +205,9 @@ Costs are where most backtests quietly die. Presets:
 | `crypto` | 15 bps | |
 
 `SquareRootImpactCost` adds market impact scaling with the square root of
-participation rate — doubling order size raises per-share impact by 1.41x, not
-2x, so total cost grows as size^1.5. Run it at two capital levels to find where
-your capacity limit actually is.
+participation rate: doubling order size raises per-share impact by 1.41x rather
+than 2x, so total cost grows as size^1.5. Run it at two capital levels to find
+where your capacity limit actually is.
 
 Every run reports **annual cost drag** next to the Sharpe. `cost_sensitivity()`
 re-runs at escalating cost levels and reports the break-even.
@@ -217,16 +216,15 @@ re-runs at escalating cost levels and reports the break-even.
 
 ## Overfitting controls
 
-- **Deflated Sharpe ratio** (Bailey & López de Prado) — corrects for how many
-  variants you tried. The expected maximum of N noisy Sharpes grows with N;
+- **Deflated Sharpe ratio** (Bailey & López de Prado): corrects for how many
+  variants you tried. The expected maximum of N noisy Sharpes grows with N, and
   DSR subtracts it before judging. The pipeline counts trials honestly: every
   parameter combination evaluated in the sweep is fed into the correction.
-- **Probabilistic Sharpe ratio** — adjusts for skew and fat tails.
-- **Minimum track record length** — how many years you would need before the
+- **Probabilistic Sharpe ratio:** adjusts for skew and fat tails.
+- **Minimum track record length:** how many years you would need before the
   Sharpe is distinguishable from zero. Frequently sobering.
-- **Walk-forward with embargo** — parameters selected on training data only,
-  with a gap before the test window so lookback windows cannot straddle the
-  boundary.
+- **Walk-forward with embargo:** parameters selected on training data only, with
+  a gap before the test window so lookback windows cannot straddle the boundary.
 
 ---
 
@@ -244,12 +242,12 @@ enforcement, walk-forward window integrity, and the null-hypothesis suite.
 Two bugs found and fixed by these tests during development, both documented as
 regression tests:
 
-- `sharpe_ratio` returned 3.7e16 for a constant return series. `np.std` of a
+- `sharpe_ratio` returned 3.7e16 for a constant return series: `np.std` of a
   constant array is ~1e-19, not `0.0`, so the `sd == 0` guard never fired.
 - The synthetic data generator used a deterministic sine wave for regimes,
-  producing a −61% drawdown at 8.9% annual volatility — impossible under a
-  random walk (0 of 3000 Monte Carlo paths came close). Replaced with stochastic
-  regime switching.
+  producing a −61% drawdown at 8.9% annual volatility; that is impossible under
+  a random walk (0 of 3000 Monte Carlo paths came close). Replaced with
+  stochastic regime switching.
 
 ---
 
@@ -261,10 +259,10 @@ regression tests:
 - **Fundamental data.** The value and quality factors described in
   `docs/STRATEGIES.md` need financial statements the free loader does not
   provide.
-- **Intraday microstructure.** The engine is daily and vectorized. Signals that
+- **Intraday microstructure.** The engine is daily and vectorised. Signals that
   live inside the day need an event-driven engine.
 - **Tell you a strategy will work.** Passing QA means the backtest is not
-  obviously broken. That is a floor, not a recommendation. The base rate for
+  obviously broken; that is a floor, not a recommendation. The base rate for
   retail strategies that survive contact with live markets is low, and nothing
   in this repo changes that.
 
@@ -300,7 +298,7 @@ attribution, what changed in the port, and references.
 ## Contributing
 
 New strategies need one method (`raw_signal`) and are automatically subjected to
-the causality and null-hypothesis tests — the QA layer does not take anyone's
+the causality and null-hypothesis tests: the QA layer does not take anyone's
 word that a signal is causal, including mine.
 
 If you find a bug in the leakage detection, that is the most valuable possible

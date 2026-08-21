@@ -1,11 +1,11 @@
-"""The 5-layer pipeline, wired end to end.
+"""The five layers, wired end to end.
 
 Data -> Research -> Backtest -> Portfolio/Risk -> Execution/Ops
 
-This is the module that turns the blueprint diagram into one callable object.
-`Pipeline.run()` executes every layer in order and returns a `PipelineResult`
-carrying the equity curve AND the QA report -- deliberately coupled, so it is
-awkward to look at performance without looking at whether it is trustworthy.
+This module is where the blueprint becomes one callable object. ``Pipeline.run()``
+executes each layer in order and returns a ``PipelineResult`` carrying both the equity
+curve and the QA report. The coupling is deliberate: reading the performance without
+also reading whether it is trustworthy should take extra effort, not less.
 """
 
 from __future__ import annotations
@@ -33,14 +33,14 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class PipelineConfig:
-    """One object holding every decision that affects the output."""
+    """Every decision that moves the output, in one place: if it is not here, it is not a knob."""
 
     # Layer 1
     universe: str = "sector_etfs"
     start: str = "2010-01-01"
     end: str = "2024-12-31"
     cache_dir: str = "./.cache/prices"
-    data_source: str = "yfinance"   # 'yfinance' | 'synthetic'
+    data_source: str = "yfinance"   # 'yfinance' (network) | 'synthetic' (offline, seeded)
     synthetic_seed: int = 42
 
     # Layer 2
@@ -89,12 +89,12 @@ class PipelineResult:
 
     @property
     def tradeable(self) -> bool:
-        """Did every blocking QA check pass? Not a recommendation -- a floor."""
+        """True when every blocking QA check passed: a floor to clear, not a recommendation."""
         return self.qa.passed
 
 
 class Pipeline:
-    """Orchestrates the five layers."""
+    """Runs the five layers in order and keeps what each one produced."""
 
     def __init__(self, config: PipelineConfig | None = None):
         self.cfg = config or PipelineConfig()
@@ -143,7 +143,7 @@ class Pipeline:
 
     def build_weights(self, strategy: Strategy, prices: pd.DataFrame,
                       risk: RiskManager) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Signal -> sizing -> risk limits. Returns (raw, risk-adjusted)."""
+        """Signal, then sizing, then risk limits; returns (raw, risk-adjusted) weights."""
         raw = strategy.generate_weights(prices)
 
         if self.cfg.sizing != "equal_weight":
@@ -151,9 +151,9 @@ class Pipeline:
             mask = raw > 0
             raw = apply_sizing(mask, prices, self.cfg.sizing)
 
-        # First pass with no equity curve, so drawdown control is skipped;
-        # we need an equity curve to compute drawdowns from, and we need
-        # weights to get an equity curve. One iteration resolves it.
+        # The first pass has no equity curve, so drawdown control is skipped:
+        # drawdowns are computed from an equity curve, and the equity curve
+        # is computed from weights. One extra iteration resolves the circle.
         adjusted = risk.apply(raw, prices, equity=None)
         return raw, adjusted
 
@@ -197,7 +197,7 @@ class Pipeline:
         raw_w, adj_w = self.build_weights(strategy, prices, risk)
         result = engine.run(prices, adj_w, volume=volume, strategy_name=strategy.name)
 
-        # Second pass: now that we have an equity curve, apply drawdown control.
+        # Second pass: with an equity curve in hand, drawdown control can bind.
         if cfg.max_drawdown_stop:
             adj_w2 = risk.apply(raw_w, prices, equity=result.equity)
             result = engine.run(prices, adj_w2, volume=volume, strategy_name=strategy.name)
@@ -222,7 +222,7 @@ class Pipeline:
                 return get_strategy(cfg.strategy, **kw)
             param_sweep = V.parameter_sensitivity(prices, factory, grid, engine)
             param_verdict = V.sensitivity_verdict(param_sweep)
-            # Honest trial count: every combination we just evaluated.
+            # Honest trial count: every combination we evaluated, not the one we kept.
             stats["n_trials_assumed"] = max(cfg.n_trials, len(param_sweep))
             stats["deflated_sharpe"] = M.deflated_sharpe_ratio(
                 result.returns, stats["n_trials_assumed"])
@@ -286,10 +286,11 @@ class Pipeline:
 
 
 def _default_grid(strategy_name: str) -> dict[str, Sequence]:
-    """Sensible sweep ranges per strategy.
+    """Default sweep ranges per strategy, kept modest on purpose.
 
-    Kept modest on purpose. Every extra combination inflates the multiple-testing
-    penalty, and the deflated Sharpe will charge you for it -- correctly.
+    Every extra combination inflates the multiple-testing penalty, and the deflated
+    Sharpe will charge us for it: correctly, since a grid searched is a set of trials
+    run whether or not we choose to report them.
     """
     return {
         "xs_momentum": {"lookback": [126, 189, 252], "skip": [0, 21], "top_n": [2, 3, 4]},

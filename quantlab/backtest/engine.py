@@ -1,25 +1,25 @@
-"""Layer 3 - Vectorized backtest engine.
+"""Layer 3: vectorised backtest engine.
 
 THE CENTRAL DESIGN DECISION
 --------------------------
 Look-ahead bias is prevented structurally, in one place, rather than by
-remembering to be careful in every strategy.
+remembering to be careful inside every strategy.
 
 The timeline the engine enforces:
 
     date t     close : signal computed from data up to and including t's close
     date t+1   open  : orders execute here
-    date t+1   close : position earns the t+1 close-to-close return... no.
+    date t+1   close : the position earns the return realised over t+1
 
 Precisely: weights decided at t's close are applied to the return realised from
-t+1 onward. In code that is exactly one line -- `weights.shift(1)` -- and it
-lives here, at line ~120, and nowhere else. Strategies return unshifted weights.
-If a strategy also shifts, you get a double lag: less profitable, not more, so
-the failure mode is at least conservative.
+t+1 onward. In code that is exactly one line (`weights.shift(1)`), it lives here
+at line ~120 and nowhere else, and strategies return unshifted weights. If a
+strategy shifts as well, the result is a double lag: less profitable rather than
+more, so the failure mode is at least conservative.
 
-Analogy: a betting slip has to be handed over before the race starts. The engine
-is the clerk who timestamps every slip and refuses any handed in mid-race, no
-matter how confident the punter is that they meant to submit it earlier.
+The clerk analogy: a betting slip has to be handed over before the race starts,
+and the engine is the clerk who timestamps every slip and refuses any handed in
+mid-race, however sure the punter is that they meant to submit it earlier.
 """
 
 from __future__ import annotations
@@ -43,8 +43,8 @@ class BacktestConfig:
     """Everything that changes the numbers, in one auditable object."""
 
     initial_capital: float = 1_000_000.0
-    rebalance: str = "M"           # D, W, M, Q -- or 'none' to trade every signal change
-    execution_lag: int = 1         # bars between signal and fill. 1 = next bar. Never 0.
+    rebalance: str = "M"           # D, W, M, Q; or 'none' to trade on every signal change
+    execution_lag: int = 1         # bars between signal and fill; 1 is the next bar, never 0
     execution_price: str = "open"  # 'open' (realistic) or 'close' (optimistic)
     max_leverage: float = 1.0
     allow_shorts: bool = False
@@ -76,7 +76,7 @@ class BacktestResult:
 
     @property
     def cost_drag_annual(self) -> float:
-        """Annualised return given up to costs. The number to put next to the Sharpe."""
+        """Annualised return given up to costs: the number to report beside the Sharpe."""
         n = len(self.returns)
         if n == 0:
             return 0.0
@@ -92,7 +92,7 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    """Vectorized backtester with structurally enforced execution lag."""
+    """Vectorised backtester with the execution lag enforced structurally."""
 
     def __init__(self, config: BacktestConfig | None = None, cost_model: CostModel | None = None):
         self.config = config or BacktestConfig()
@@ -101,11 +101,12 @@ class BacktestEngine:
     # -- rebalance calendar ------------------------------------------------
 
     def _rebalance_mask(self, index: pd.DatetimeIndex) -> pd.Series:
-        """True on dates the portfolio is allowed to trade.
+        """True on the dates the portfolio is allowed to trade.
 
-        Between rebalances, weights are held (and drift with prices). Rebalance
-        frequency is a real decision with a real cost: monthly on a daily signal
-        cuts turnover ~20x, and QA Section E asks you to justify the choice.
+        Between rebalances the weights are simply held, and they drift with
+        prices. Rebalance frequency is a real decision with a real cost: monthly
+        rebalancing on a daily signal cuts turnover by roughly 20x, and QA
+        Section E asks us to justify whichever frequency we picked.
         """
         freq = self.config.rebalance.lower()
         s = pd.Series(index=index, dtype=bool)
@@ -116,8 +117,9 @@ class BacktestEngine:
                 "q": "QE", "quarterly": "QE"}.get(freq)
         if code is None:
             raise ValueError(f"Unknown rebalance frequency {self.config.rebalance!r}")
-        # Last available session in each period -- not the calendar date, which
-        # may be a weekend or holiday and would silently drop rebalances.
+        # Last available session in each period, not the calendar date: the
+        # calendar date may fall on a weekend or a holiday, and matching on it
+        # would silently drop rebalances.
         marks = pd.Series(index, index=index).groupby(pd.Grouper(freq=code)).max().dropna()
         s[:] = False
         s.loc[s.index.isin(marks.values)] = True
@@ -139,7 +141,8 @@ class BacktestEngine:
         ----------
         prices  : date x symbol close prices (adjusted).
         weights : date x symbol target weights, decided at each date's CLOSE.
-                  Pass them UNSHIFTED. The engine applies the lag.
+                  Pass them UNSHIFTED: the engine applies the lag itself, and a
+                  strategy that also shifts pays the lag twice.
         """
         prices = prices.sort_index()
         weights = weights.reindex(index=prices.index, columns=prices.columns).fillna(0.0)
@@ -162,16 +165,16 @@ class BacktestEngine:
 
         # ================================================================
         # THE LAG. This is the only place in the library where signal
-        # timing is decided. weights at row t were computed from data up
-        # to t's close; shifting by execution_lag makes them effective
-        # from t+lag onward, so they can never earn t's own return.
+        # timing is decided: weights on row t were computed from data up
+        # to t's close, so shifting by execution_lag makes them effective
+        # from t+lag onward and they can never earn t's own return.
         # ================================================================
         effective = held.shift(cfg.execution_lag).fillna(0.0)
 
         # ---- returns actually earned by held positions ----
         if cfg.execution_price == "open" and open_prices is not None:
-            # Close-to-close return of the asset; the lag already ensures we
-            # were positioned before this bar began.
+            # Close-to-close return of the asset; the lag has already ensured
+            # that we were positioned before this bar began.
             asset_returns = prices.pct_change(fill_method=None).fillna(0.0)
         else:
             asset_returns = prices.pct_change(fill_method=None).fillna(0.0)
@@ -187,7 +190,7 @@ class BacktestEngine:
 
         net_ret = gross_ret - cost_series
 
-        # ---- warm-up trim: the signal is not valid before it has history ----
+        # ---- warm-up trim: the signal is not valid until it has history ----
         warm = min(cfg.warmup_bars, max(0, len(net_ret) - 2))
         if warm > 0:
             net_ret = net_ret.iloc[warm:]
@@ -219,6 +222,6 @@ class BacktestEngine:
         )
 
     def run_strategy(self, strategy, prices: pd.DataFrame, **kwargs) -> BacktestResult:
-        """Generate weights from a Strategy and run. The normal entry point."""
+        """Generate weights from a Strategy and run them: the normal entry point."""
         w = strategy.generate_weights(prices)
         return self.run(prices, w, strategy_name=strategy.name, **kwargs)

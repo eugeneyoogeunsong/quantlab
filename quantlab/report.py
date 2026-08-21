@@ -1,12 +1,12 @@
-"""Layer 5 - Reporting (QA Section F).
+"""Layer 5, reporting (QA Section F).
 
-Self-contained HTML: equity curve, drawdowns, monthly table, risk metrics, and
-the QA report. Charts are inline SVG, so the file works offline and can be
-emailed without breaking.
+One self-contained HTML file: equity curve, drawdowns, monthly table, risk metrics,
+and the QA report. Charts are emitted as inline SVG, so the page renders offline and
+survives being emailed, archived, or opened three years later.
 
-Deliberate choice: the QA verdict sits at the TOP, above the returns. If a
-strategy failed its checks, that is the first thing a reader should see, not a
-footnote under a flattering equity curve.
+The ordering is deliberate: the QA verdict sits at the top, above the returns. If a
+strategy failed its checks, that is the first thing a reader should meet, not a
+footnote below a flattering equity curve.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def _fmt(v, kind="pct"):
 
 def _sparkline(series: pd.Series, width=1000, height=240, color="#5b2c9f",
                fill=True, log_scale=False, zero_base=False) -> str:
-    """Inline SVG line chart. No JS, no CDN -- the file stands alone."""
+    """Inline SVG line chart, with no JavaScript and no CDN: the report stands on its own."""
     s = series.dropna()
     if len(s) < 2:
         return "<p style='color:#6b7280'>Not enough data to plot.</p>"
@@ -87,7 +87,7 @@ def _sparkline(series: pd.Series, width=1000, height=240, color="#5b2c9f",
     area = (f'<polygon points="0,{baseline:.1f} {pts} {width},{baseline:.1f}" '
             f'fill="{color}" opacity="0.13"/>') if fill else ""
 
-    # Sparse date labels
+    # Five date ticks only: a dense axis competes with the line for attention.
     n = len(s)
     ticks = ""
     for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
@@ -188,19 +188,19 @@ def _qa_table(qa) -> str:
 
 
 def build_report(pr, output_path: str | Path, title: str | None = None) -> Path:
-    """Render a PipelineResult to standalone HTML."""
+    """Render a ``PipelineResult`` to one standalone HTML file; returns the path written."""
     res, stats, qa = pr.result, pr.stats, pr.qa
     cfg = pr.config
-    title = title or f"{res.strategy_name} — Backtest Report"
+    title = title or f"{res.strategy_name}: Backtest Report"
 
     equity = res.equity
     dd = M.drawdown_series(res.returns)
 
     banner_cls = "pass" if qa.passed else "fail"
-    banner_txt = "QA PASSED" if qa.passed else f"QA FAILED — {len(qa.failures)} blocking issue(s)"
+    banner_txt = "QA PASSED" if qa.passed else f"QA FAILED: {len(qa.failures)} blocking issue(s)"
     banner_detail = qa.summary_line()
     if not qa.passed:
-        banner_detail += " — " + "; ".join(c.name for c in qa.failures)
+        banner_detail += " (" + "; ".join(c.name for c in qa.failures) + ")"
 
     bench_block = ""
     if pr.benchmark_returns is not None and "benchmark_cagr" in stats:

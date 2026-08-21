@@ -1,14 +1,14 @@
-"""Layer 1 - Data. Vendor-agnostic price loading with an on-disk cache.
+"""Layer 1, data: vendor-agnostic price loading backed by an on-disk cache.
 
 Design note
 -----------
-`DataSource` is a Protocol, not a base class. Any object with a matching
-`fetch` signature works, so swapping yfinance for Polygon/Tiingo later means
-writing one new class and changing one line of config -- no edits to research,
-backtest, or portfolio code.
+`DataSource` is a Protocol, not a base class: any object carrying a matching
+`fetch` signature qualifies, so swapping yfinance for Polygon or Tiingo later
+costs one new class and one line of config, with no edits to the research,
+backtest, or portfolio layers.
 
-The cache is content-addressed by (source, symbols, dates, interval), so
-re-running research is free after the first pull and results are reproducible.
+The cache is content-addressed by (source, symbols, dates, interval); after the
+first pull, re-running research is free and the results are reproducible.
 """
 
 from __future__ import annotations
@@ -26,12 +26,12 @@ import pandas as pd
 
 log = logging.getLogger(__name__)
 
-# Canonical column names every loader must return.
+# Canonical column names, in the order every loader must return them.
 OHLCV = ["open", "high", "low", "close", "volume"]
 
 
 class DataSource(Protocol):
-    """Any price vendor adapter satisfies this."""
+    """Structural contract for a price vendor adapter: implement `fetch`, nothing else."""
 
     name: str
 
@@ -42,7 +42,7 @@ class DataSource(Protocol):
         end: str,
         interval: str = "1d",
     ) -> pd.DataFrame:
-        """Return a long-format frame indexed by (date, symbol) with OHLCV columns."""
+        """Return a long-format frame indexed by (date, symbol), carrying the OHLCV columns."""
         ...
 
 
@@ -50,12 +50,12 @@ class DataSource(Protocol):
 class YFinanceSource:
     """yfinance adapter.
 
-    auto_adjust=True gives split- AND dividend-adjusted OHLC, which satisfies
-    QA Section A item 1. The important caveat -- and it is a real one -- is that
-    yfinance serves only *currently listed* tickers. There is no delisted
-    history, so any universe you build from it carries survivorship bias.
-    `survivorship_safe = False` propagates that fact into the QA report rather
-    than letting it sit silently in a footnote.
+    `auto_adjust=True` returns OHLC adjusted for splits and dividends alike, which
+    satisfies QA Section A item 1. The caveat is a real one: yfinance serves only
+    *currently listed* tickers, so there is no delisted history and any universe
+    built from it carries survivorship bias. Setting `survivorship_safe = False`
+    propagates that fact into the QA report instead of leaving it to sit silently
+    in a footnote.
     """
 
     name: str = "yfinance"
@@ -71,7 +71,7 @@ class YFinanceSource:
     ) -> pd.DataFrame:
         import yfinance as yf
 
-        symbols = list(dict.fromkeys(symbols))  # de-dupe, keep order
+        symbols = list(dict.fromkeys(symbols))  # de-duplicate, preserving order
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             raw = yf.download(
@@ -97,7 +97,7 @@ class YFinanceSource:
                 "  PipelineConfig(data_source='synthetic')   or   --source synthetic"
             )
 
-        # yfinance returns a flat frame for one symbol, MultiIndex for many.
+        # yfinance returns a flat frame for a single symbol, a MultiIndex for several.
         if isinstance(raw.columns, pd.MultiIndex):
             frame = raw.stack(level=1, future_stack=True)
             frame.index.names = ["date", "symbol"]
@@ -119,10 +119,11 @@ class YFinanceSource:
 
 @dataclass
 class CSVSource:
-    """Load from local CSVs -- one file per symbol, named ``<SYMBOL>.csv``.
+    """Load from local CSVs, one file per symbol, named ``<SYMBOL>.csv``.
 
-    Use this to plug in a paid vendor export, or point-in-time data that
-    includes delisted names (which is how you actually fix survivorship bias).
+    Use this to plug in a paid vendor export, or point-in-time data that includes
+    delisted names (which is how survivorship bias actually gets fixed, rather
+    than merely disclosed).
     """
 
     directory: Path
@@ -155,18 +156,18 @@ class CSVSource:
 
 @dataclass
 class SyntheticSource:
-    """Deterministic simulated prices. No network required.
+    """Deterministic simulated prices, with no network required.
 
-    Exists for three reasons:
+    It exists for three reasons:
 
-    1. CI. Tests that hit a live vendor are flaky by construction and will fail
-       on a Sunday, during an outage, or behind a firewall.
+    1. CI. Tests that hit a live vendor are flaky by construction: they fail on a
+       Sunday, during an outage, or behind a firewall.
     2. Offline development.
-    3. Null-hypothesis testing. Prices here are a random walk with a drift you
-       specify -- there is genuinely no signal beyond that drift. If a strategy
-       shows a strong Sharpe on `regime="random_walk"` data, the strategy is
-       finding structure that does not exist, and the finding is about your
-       code, not the market. This is a surprisingly effective bug detector.
+    3. Null-hypothesis testing. Prices here are a random walk plus the drift you
+       specify, so there is genuinely no signal beyond that drift. If a strategy
+       posts a strong Sharpe on `regime="random_walk"` data, it has found
+       structure that does not exist, and the finding is about the code, not the
+       market; as bug detectors go, this one costs nothing and catches plenty.
     """
 
     seed: int = 42
@@ -190,32 +191,32 @@ class SyntheticSource:
         if n < 2:
             raise RuntimeError(f"Date range {start}..{end} yields fewer than 2 sessions")
 
-        # Shared market factor, so assets are correlated the way real ones are.
-        # Without it, cross-sectional strategies see an unrealistically easy
-        # diversification benefit.
+        # A shared market factor, so the assets co-move the way real ones do:
+        # without it, cross-sectional strategies collect a diversification
+        # benefit that no real panel would hand them.
         market = rng.normal(0, self.annual_vol / np.sqrt(252) * 0.6, n)
 
         parts = []
         for i, sym in enumerate(dict.fromkeys(symbols)):
-            # Spread drift/vol across symbols so cross-sectional strategies have
-            # something to rank.
+            # Spread drift and volatility across symbols so cross-sectional
+            # strategies have something to rank on.
             drift = self.annual_drift * (1 + 0.5 * ((i % 5) - 2) / 2)
             vol = self.annual_vol * (1 + 0.3 * ((i % 4) - 1.5) / 1.5)
             daily_vol = vol / np.sqrt(252)
 
             idio = rng.normal(drift / 252, daily_vol * 0.8, n)
-            shocks = idio + market * (0.8 + 0.4 * ((i % 3) / 2))  # varying beta
+            shocks = idio + market * (0.8 + 0.4 * ((i % 3) / 2))  # beta varies by symbol
 
             if self.regime in ("trending", "mixed"):
                 # Stochastic regime switching, NOT a deterministic cycle.
                 #
-                # An earlier version used a sine wave here. It was a mistake: a
-                # fixed-period oscillation is perfectly predictable, and it
-                # produced multi-year drawdowns (-61%) that were impossible given
-                # the stated 8.9% volatility. Any momentum strategy tested on it
-                # looked far better than it should. A two-state Markov chain with
-                # persistent but random switching gives realistic trends without
-                # handing strategies a free clock to trade against.
+                # An earlier version used a sine wave here, and it was a mistake:
+                # a fixed-period oscillation is perfectly predictable, and it
+                # produced multi-year drawdowns (-61%) that are impossible given
+                # the stated 8.9% volatility, so any momentum strategy tested on
+                # it looked far better than it deserved. A two-state Markov chain
+                # with persistent but random switching gives realistic trends
+                # without handing strategies a free clock to trade against.
                 p_switch = 1 / 189 if self.regime == "trending" else 1 / 252
                 state, states = 1, np.empty(n)
                 for t in range(n):
@@ -244,11 +245,12 @@ class SyntheticSource:
 
 @dataclass
 class PriceCache:
-    """Parquet cache keyed by request fingerprint.
+    """Parquet cache keyed by a fingerprint of the request.
 
-    Reproducibility matters more than it sounds: if the vendor silently
-    restates history between two runs, an uncached pipeline will hand you two
-    different backtests for identical code and you will not know why.
+    Reproducibility matters more here than it sounds: if the vendor silently
+    restates history between two runs, an uncached pipeline hands you two
+    different backtests for identical code, and nothing in the output tells you
+    why.
     """
 
     root: Path = field(default_factory=lambda: Path("./.cache/prices"))
@@ -282,16 +284,16 @@ class PriceCache:
         frame = source.fetch(symbols, start, end, interval)
         try:
             frame.to_parquet(path)
-        except Exception as exc:  # pragma: no cover - cache write is best-effort
+        except Exception as exc:  # pragma: no cover (cache writes are best-effort)
             log.warning("could not write cache: %s", exc)
         return frame
 
 
 def to_wide(frame: pd.DataFrame, field: str = "close") -> pd.DataFrame:
-    """Long (date, symbol) -> wide date x symbol matrix for one field.
+    """Pivot long (date, symbol) rows into a wide date x symbol matrix for one field.
 
-    Every downstream layer speaks wide matrices. Doing the pivot once here
-    keeps a single, auditable place where date alignment happens.
+    Every downstream layer speaks wide matrices; doing the pivot once, here, keeps
+    a single auditable place where date alignment happens.
     """
     if field not in frame.columns:
         raise KeyError(f"{field!r} not in {list(frame.columns)}")
@@ -309,7 +311,7 @@ def load_prices(
     interval: str = "1d",
     force: bool = False,
 ) -> pd.DataFrame:
-    """Convenience entry point: cached long-format OHLCV."""
+    """Convenience entry point: cached, long-format OHLCV for the requested symbols."""
     source = source or YFinanceSource()
     cache = PriceCache(Path(cache_dir))
     return cache.get_or_fetch(source, symbols, start, end, interval, force=force)

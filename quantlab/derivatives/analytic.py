@@ -3,9 +3,9 @@
 Original implementations by Adrian (Adrian.ph689), 2025.
 Refactored into library form; formulas unchanged.
 
-These are the reference values everything else is measured against. A numerical
-method that cannot reproduce Black-Scholes on a vanilla European call is not
-going to be trusted on an exotic one.
+These are the reference values everything else is measured against: a numerical
+method that cannot reproduce Black-Scholes on a vanilla European call will not
+be trusted on an exotic one.
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ __all__ = [
 def _d1_d2(S, K, T, r, sigma, q=0.0):
     """The two arguments of the normal CDF in Black-Scholes.
 
-    `T` here is time to expiry, already net of any current time t.
+    Here `T` is time to expiry (i.e., already net of any current time t).
     """
     S = np.asarray(S, dtype=float)
-    T = np.maximum(np.asarray(T, dtype=float), 1e-12)  # avoid /0 at expiry
+    T = np.maximum(np.asarray(T, dtype=float), 1e-12)  # floor T: no division by zero at expiry
     sqrt_T = np.sqrt(T)
     d1 = (np.log(S / K) + (r - q + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
     return d1, d1 - sigma * sqrt_T
@@ -48,10 +48,10 @@ def black_scholes_call(S, K, T, r, sigma, q: float = 0.0):
 
     Notes
     -----
-    The formula assumes constant volatility and a lognormal terminal
-    distribution. Real option markets visibly disagree with the constant-vol
-    part -- that disagreement *is* the volatility smile, and inverting this
-    formula to measure it is what `implied_vol.py` does.
+    We assume constant volatility and a lognormal terminal distribution. Real
+    option markets visibly disagree with the constant-vol part: that
+    disagreement *is* the volatility smile, and inverting this formula to
+    measure it is what `implied_vol.py` does.
     """
     d1, d2 = _d1_d2(S, K, T, r, sigma, q)
     T = np.maximum(np.asarray(T, dtype=float), 1e-12)
@@ -59,7 +59,7 @@ def black_scholes_call(S, K, T, r, sigma, q: float = 0.0):
 
 
 def black_scholes_put(S, K, T, r, sigma, q: float = 0.0):
-    """European put price. Derived from the same d1/d2."""
+    """European put price, built from the same d1/d2."""
     d1, d2 = _d1_d2(S, K, T, r, sigma, q)
     T = np.maximum(np.asarray(T, dtype=float), 1e-12)
     return K * np.exp(-r * T) * norm.cdf(-d2) - S * np.exp(-q * T) * norm.cdf(-d1)
@@ -69,9 +69,9 @@ def vega(S, K, T, r, sigma, q: float = 0.0):
     """Sensitivity of price to volatility, dV/dsigma.
 
     Identical for calls and puts (put-call parity has no sigma dependence).
-    This is the derivative Newton-Raphson uses to invert for implied vol, and
-    it vanishes deep in- or out-of-the-money -- which is exactly where that
-    inversion becomes numerically unstable.
+    This is the derivative Newton-Raphson uses to invert for implied vol, and it
+    vanishes deep in- or out-of-the-money, which is exactly where that inversion
+    becomes numerically unstable.
     """
     d1, _ = _d1_d2(S, K, T, r, sigma, q)
     T = np.maximum(np.asarray(T, dtype=float), 1e-12)
@@ -81,8 +81,9 @@ def vega(S, K, T, r, sigma, q: float = 0.0):
 def black_scholes_greeks(S, K, T, r, sigma, q: float = 0.0, option: str = "call") -> dict:
     """Delta, gamma, vega, theta, rho.
 
-    Theta is returned per YEAR. Divide by 365 for the more commonly quoted
-    per-calendar-day decay.
+    Theta is returned per YEAR; divide by 365 for the more commonly quoted
+    per-calendar-day decay. All five are spot Greeks under the same constant-vol
+    assumptions as the price itself.
     """
     d1, d2 = _d1_d2(S, K, T, r, sigma, q)
     T = np.maximum(np.asarray(T, dtype=float), 1e-12)
@@ -116,8 +117,8 @@ def black_scholes_greeks(S, K, T, r, sigma, q: float = 0.0, option: str = "call"
 def up_and_out_call_closed_form(S0, K, B, T, r, sigma):
     """Up-and-out barrier call: pays like a call unless the barrier is touched.
 
-    If the underlying ever trades at or above `B` before expiry, the option is
-    knocked out and pays nothing. Continuous monitoring is assumed.
+    If the underlying ever trades at or above `B` before expiry the option is
+    knocked out and pays nothing. We assume continuous monitoring.
 
     The price decomposes into four terms: the two you would recognise from
     vanilla Black-Scholes, and two reflection terms that subtract the value of
@@ -125,16 +126,17 @@ def up_and_out_call_closed_form(S0, K, B, T, r, sigma):
     motion is what makes the closed form possible at all.
 
     A barrier option is always worth less than the equivalent vanilla, and the
-    test suite asserts exactly that. As B → infinity the knockout becomes
-    unreachable and the price converges to the vanilla call.
+    test suite asserts exactly that. As B grows without bound the knockout
+    becomes unreachable and the price converges to the vanilla call.
 
     Original implementation by Adrian (Adrian.ph689), 2025.
     """
     if B <= K:
-        # Knocked out before it can finish in the money: worthless.
+        # Barrier at or below the strike: every in-the-money path has already
+        # knocked out, so the contract is worthless by construction.
         return 0.0
     if S0 >= B:
-        return 0.0  # already knocked out
+        return 0.0  # spot is already at or through the barrier
 
     def d(t, s, sign):
         drift = (r + 0.5 * sigma**2) if sign == "+" else (r - 0.5 * sigma**2)

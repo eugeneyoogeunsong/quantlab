@@ -1,13 +1,13 @@
-"""Layer 4 - Risk controls (QA Section E).
+"""Layer 4: risk controls (QA Section E).
 
-The blueprint's warning is that most people skip layers 3-5. This module is
-layer 4's core: the rules that decide not what to buy, but what you refuse to do
+The blueprint warns that most people skip layers 3-5. This module is the core of
+layer 4: the rules that decide not what to buy, but what we refuse to do
 regardless of how good the signal looks.
 
-Every control here is causal. In particular `drawdown_control` uses only equity
-observed up to t-1 when deciding exposure for t. Computing a drawdown from the
-full equity curve and then "de-risking" at the peaks is a spectacular and
-surprisingly common form of look-ahead bias.
+Every control here is causal. Specifically, `drawdown_control` uses only equity
+observed up to t-1 when deciding exposure for t; computing a drawdown from the
+full equity curve and then "de-risking" at the peaks is a spectacular, and
+surprisingly common, form of look-ahead bias.
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ class RiskLimits:
     max_gross_exposure: float = 1.0     # sum |w|
     max_net_exposure: float = 1.0       # sum w
     max_sector_exposure: float = 0.40
-    max_drawdown_stop: float = 0.25     # de-risk beyond this
-    drawdown_derisk_to: float = 0.50    # scale book to this on breach
+    max_drawdown_stop: float = 0.25     # de-risk beyond this depth
+    drawdown_derisk_to: float = 0.50    # scale the book to this on breach
     vol_target: float | None = None
     max_leverage: float = 1.0
 
@@ -43,13 +43,13 @@ class RiskLimits:
 def apply_position_limits(weights: pd.DataFrame, max_position: float = 0.25) -> pd.DataFrame:
     """Cap any single name, then renormalise so the book still sums correctly.
 
-    Concentration is the fastest route to ruin. A 40% position in one name means
+    Concentration is the fastest route to ruin: a 40% position in one name means
     a single accounting scandal is a 40% portfolio event.
     """
     capped = weights.clip(-max_position, max_position)
     original_gross = weights.abs().sum(axis=1)
     new_gross = capped.abs().sum(axis=1)
-    # Redistribute only where capping actually removed exposure.
+    # Redistribute only where the cap actually removed exposure.
     need = (original_gross > 0) & (new_gross > 0) & (new_gross < original_gross - 1e-12)
     scale = pd.Series(1.0, index=weights.index)
     scale[need] = (original_gross[need] / new_gross[need]).clip(upper=1.0 / max(max_position, 1e-9))
@@ -73,7 +73,7 @@ def apply_sector_limits(weights: pd.DataFrame, sector_map: dict[str, str],
                         max_sector: float = 0.40) -> pd.DataFrame:
     """Cap aggregate exposure per sector.
 
-    Matters because signals cluster. A momentum screen in 2020 would happily
+    This matters because signals cluster: a momentum screen in 2020 would happily
     have handed you a portfolio of nine software names and called it diversified.
     """
     out = weights.copy()
@@ -96,16 +96,16 @@ def apply_sector_limits(weights: pd.DataFrame, sector_map: dict[str, str],
 def drawdown_control(weights: pd.DataFrame, equity: pd.Series,
                      stop_level: float = 0.25, derisk_to: float = 0.50,
                      recovery_level: float = 0.10) -> pd.DataFrame:
-    """Cut exposure after a drawdown threshold; restore on recovery.
+    """Cut exposure past a drawdown threshold; restore it on recovery.
 
     CAUSALITY: exposure for date t is decided from equity through t-1 only.
 
     Whether this helps is genuinely contested. It reliably reduces the depth of
-    the worst drawdown. It also reliably locks in losses at the bottom and misses
+    the worst drawdown; it also reliably locks in losses at the bottom and misses
     the sharpest rebounds, which historically cluster immediately after the worst
     days. The honest framing is that it buys psychological survivability at some
-    cost in expected return -- and a system you actually stick with beats a
-    better one you abandon.
+    cost in expected return: a system you actually stick with beats a better one
+    you abandon.
     """
     eq = equity.reindex(weights.index).ffill()
     prior_eq = eq.shift(1)
@@ -127,7 +127,7 @@ def drawdown_control(weights: pd.DataFrame, equity: pd.Series,
 def volatility_scaling(weights: pd.DataFrame, prices: pd.DataFrame,
                        target_vol: float = 0.10, window: int = 63,
                        max_scale: float = 1.5) -> pd.DataFrame:
-    """Alias into the sizing module's vol targeting, kept here for discoverability."""
+    """Alias onto the sizing module's vol targeting, kept here for discoverability."""
     from .sizing import volatility_target
     return volatility_target(weights, prices, target_vol, window, max_scale)
 
@@ -136,15 +136,15 @@ def volatility_scaling(weights: pd.DataFrame, prices: pd.DataFrame,
 class RiskManager:
     """Applies the full stack of controls in a deliberate order.
 
-    Order matters and is not arbitrary:
-      1. position caps    -- fix concentration first
-      2. sector caps      -- then cluster risk
-      3. vol targeting    -- then scale total risk
-      4. exposure caps    -- then enforce the hard leverage ceiling
-      5. drawdown control -- last, so it can override everything above
+    The order matters and is not arbitrary:
+      1. position caps    : fix concentration first
+      2. sector caps      : then cluster risk
+      3. vol targeting    : then scale total risk
+      4. exposure caps    : then enforce the hard leverage ceiling
+      5. drawdown control : last, so that it can override everything above
 
-    Reversing 3 and 4 would let vol targeting push you back above the leverage
-    limit after it had been enforced.
+    Reversing 3 and 4 would let vol targeting push the book back above the
+    leverage limit after it had already been enforced.
     """
 
     limits: RiskLimits = field(default_factory=RiskLimits)
@@ -179,7 +179,7 @@ class RiskManager:
         return w.fillna(0.0)
 
     def audit(self, weights: pd.DataFrame) -> pd.DataFrame:
-        """Post-hoc check that no limit was violated. Trust, then verify."""
+        """Post-hoc check that no limit was breached: trust, then verify."""
         rows = []
         maxpos = weights.abs().max(axis=1)
         gross = weights.abs().sum(axis=1)

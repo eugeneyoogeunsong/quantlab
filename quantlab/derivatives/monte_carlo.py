@@ -4,14 +4,14 @@ Original implementations by Adrian (Adrian.ph689), 2025. Refactored into
 library form and vectorised across paths; the original looped path by path,
 which is clearer to read but roughly two orders of magnitude slower.
 
-Monte Carlo is the slowest and least accurate method here for a vanilla
-European call, where a closed form exists. It earns its place on payoffs that
-depend on the whole path, or on many underlyings at once, where the lattice and
-the PDE both become intractable.
+Monte Carlo is the slowest and least accurate method here for a vanilla European
+call, where a closed form exists. It earns its place on payoffs that depend on
+the whole path, or on many underlyings at once, where the lattice and the PDE
+both become intractable.
 
 Its error shrinks as 1/sqrt(n_paths): 100x the compute buys 10x the accuracy.
 That is a poor exchange rate, and the reason variance-reduction techniques
-(antithetic variates, control variates) exist.
+(antithetic variates, control variates) exist at all.
 """
 
 from __future__ import annotations
@@ -29,13 +29,13 @@ def simulate_gbm_paths(S0: float, T: float, r: float, sigma: float,
 
     Returns an array of shape (n_paths, n_steps + 1) including S0 at column 0.
 
-    Uses the exact lognormal solution rather than an Euler discretisation, so
-    there is no time-discretisation bias in the terminal value -- only sampling
+    We step the exact lognormal solution rather than an Euler discretisation, so
+    there is no time-discretisation bias in the terminal value, only sampling
     error.
 
     `antithetic=True` pairs each path with its mirror image (Z and -Z). Because
     the pair's errors are negatively correlated, the average is less noisy for
-    the same number of draws. It requires an even `n_paths`.
+    the same number of draws; it requires an even `n_paths`.
     """
     rng = np.random.default_rng(seed)
     dt = T / n_steps
@@ -62,9 +62,9 @@ def monte_carlo_european(S0, K, T, r, sigma, n_paths: int = 50_000,
 
     Returns the price, or `(price, standard_error)` if `return_stderr=True`.
 
-    Always look at that standard error. A Monte Carlo price quoted without one
-    is a number with unknown precision -- and the 95% interval is roughly
-    price +/- 2*stderr, which is often wider than people expect.
+    Always look at that standard error: a Monte Carlo price quoted without one is
+    a number of unknown precision, and the 95% interval is roughly
+    price +/- 2*stderr, which is usually wider than people expect.
     """
     paths = simulate_gbm_paths(S0, T, r, sigma, n_paths, n_steps, seed, antithetic)
     S_T = paths[:, -1]
@@ -92,9 +92,9 @@ def monte_carlo_up_and_out(S0, K, B, T, r, sigma, n_paths: int = 50_000,
     The subtlety that makes this interesting
     ----------------------------------------
     Checking only the simulated grid points for a barrier breach systematically
-    OVERPRICES the option. The path is continuous; between two observations
-    that both sit below the barrier, the true path may still have crossed it and
-    knocked the option out. Discrete monitoring misses those crossings, so too
+    OVERPRICES the option. The path is continuous, so between two observations
+    that both sit below the barrier the true path may still have crossed it and
+    knocked the option out; discrete monitoring misses those crossings, and too
     many paths survive.
 
     The Brownian bridge correction fixes this analytically. Conditional on the
@@ -104,11 +104,11 @@ def monte_carlo_up_and_out(S0, K, B, T, r, sigma, n_paths: int = 50_000,
         p_cross = exp( -2 * ln(S_prev/B) * ln(S_next/B) / (sigma^2 * dt) )
 
     Each path is then weighted by its probability of *surviving* every step,
-    rather than being counted as a binary survivor. The products are computed as
+    rather than being counted as a binary survivor. We compute those products as
     exp(sum(log(.))) to avoid underflow when many steps are involved.
 
-    Set `brownian_bridge=False` to see the bias for yourself -- the test suite
-    asserts the uncorrected price is higher.
+    Set `brownian_bridge=False` to see the bias for yourself: the test suite
+    asserts the uncorrected price is the higher of the two.
 
     Original implementation by Adrian (Adrian.ph689), 2025.
     """
@@ -121,7 +121,8 @@ def monte_carlo_up_and_out(S0, K, B, T, r, sigma, n_paths: int = 50_000,
 
     if brownian_bridge:
         prev, nxt = paths[:, :-1], paths[:, 1:]
-        # Any grid observation at/above the barrier is an outright knockout.
+        # A grid observation at or above the barrier is an outright knockout, so
+        # it overrides whatever survival weight the bridge would otherwise assign.
         breached = (paths >= B).any(axis=1)
 
         with np.errstate(divide="ignore", invalid="ignore"):

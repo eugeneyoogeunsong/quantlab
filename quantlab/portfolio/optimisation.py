@@ -1,33 +1,33 @@
-"""Layer 4 - Mean-variance optimisation (Markowitz MPT).
+"""Layer 4: mean-variance optimisation (Markowitz MPT).
 
-Original implementation by Adrian (Adrian.ph689), 2025, from a study
-benchmarking CAPM- and EWMA-informed MPT portfolios against the S&P 500 and an
-equal-weight book, 2019-2023 with quarterly rebalancing. Refactored here into
-quantlab's Layer 4 interface; the estimators and objectives are unchanged.
+Original implementation by Adrian (Adrian.ph689), 2025, from a study benchmarking
+CAPM- and EWMA-informed MPT portfolios against the S&P 500 and an equal-weight
+book over 2019-2023 with quarterly rebalancing. Refactored here into quantlab's
+Layer 4 interface; the estimators and objectives are unchanged.
 
 Where this sits
 ---------------
-`sizing.py` holds heuristic weighting rules -- equal weight, inverse
-volatility, risk parity. They need no return forecast. This module is the
-optimisation-based alternative: it takes an expected-return vector and a
-covariance matrix and solves for the weights that maximise Sharpe or minimise
+`sizing.py` holds the heuristic weighting rules (equal weight, inverse
+volatility, risk parity), none of which require a return forecast. This module is
+the optimisation-based alternative: it takes an expected-return vector and a
+covariance matrix, then solves for the weights that maximise Sharpe or minimise
 variance.
 
 An honest warning before you use it
 -----------------------------------
-Mean-variance optimisation is notoriously fragile in practice. It is a
-maximiser, and what it mostly maximises is estimation error: it piles into
-whichever asset has the most overstated expected return, because that is
-exactly what "attractive" looks like to the objective. Small changes in the
-inputs produce large changes in the weights.
+Mean-variance optimisation is fragile in practice. It is a maximiser, and what it
+mostly maximises is estimation error: it piles into whichever asset has the most
+overstated expected return, because that is exactly what "attractive" looks like
+to the objective. Small changes in the inputs therefore produce large changes in
+the weights.
 
 Michaud called it an "error maximiser", and the empirical literature repeatedly
 finds naive 1/N hard to beat out of sample. That is why the constraints here
 matter more than they look, and why `min_weight`/`max_weight` default to
 something restrictive rather than unbounded.
 
-Analogy: fitting a curve through data points that each have error bars, then
-reporting the fit to four decimal places. The arithmetic is exact; the
+The analogy is fitting a curve through data points that each carry error bars,
+then reporting the fit to four decimal places: the arithmetic is exact, the
 confidence is not.
 """
 
@@ -57,19 +57,19 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
-# Input estimation -- EWMA
+# Input estimation: EWMA
 # ---------------------------------------------------------------------------
 
 def ewma_covariance(returns: pd.DataFrame, alpha: float = 0.06,
                     annualise: bool = True) -> pd.DataFrame:
-    """Exponentially-weighted covariance, using the most recent estimate.
+    """Exponentially-weighted covariance, taking the most recent estimate.
 
-    Recent observations get more weight, so the estimate tracks changing market
-    conditions instead of averaging a crisis together with the calm years
-    around it. `alpha` is the smoothing factor: 0.06 corresponds to a half-life
-    of roughly 11 days, close to RiskMetrics' lambda = 0.94 convention.
+    Recent observations carry more weight, so the estimate tracks changing market
+    conditions instead of averaging a crisis together with the calm years around
+    it. `alpha` is the smoothing factor: 0.06 corresponds to a half-life of
+    roughly 11 days, close to the RiskMetrics lambda = 0.94 convention.
 
-    Causal by construction -- `ewm` only ever looks backwards.
+    Causal by construction, since `ewm` only ever looks backwards.
     """
     if not 0 < alpha <= 1:
         raise ValueError(f"alpha must be in (0, 1], got {alpha}")
@@ -84,9 +84,9 @@ def ewma_drift(returns: pd.DataFrame, alpha: float = 0.06,
                annualise: bool = True) -> pd.Series:
     """Exponentially-weighted mean return, most recent estimate.
 
-    Be sceptical of this as an expected-return forecast. Mean returns are
-    estimated far less precisely than covariances -- you need decades of data
-    to pin down a mean to useful accuracy, while a covariance stabilises in
+    Treat this sceptically as an expected-return forecast: mean returns are
+    estimated far less precisely than covariances, since pinning a mean down to
+    useful accuracy takes decades of data whilst a covariance stabilises in
     months. This is the weakest input in the whole pipeline.
     """
     mu = returns.dropna(how="all").ewm(alpha=alpha).mean().iloc[-1]
@@ -94,18 +94,18 @@ def ewma_drift(returns: pd.DataFrame, alpha: float = 0.06,
 
 
 # ---------------------------------------------------------------------------
-# Input estimation -- CAPM
+# Input estimation: CAPM
 # ---------------------------------------------------------------------------
 
 def capm_regression(asset_returns: pd.Series, market_returns: pd.Series,
                     alpha_ewma: float | None = 0.06) -> dict:
     """Regress an asset on the market: R_i = alpha + beta*R_M + e.
 
-    With `alpha_ewma` set, the regression is weighted so recent observations
-    count more (WLS), letting beta drift as the relationship changes. Set it to
-    None for ordinary least squares over the whole sample.
+    With `alpha_ewma` set, the regression is weighted so that recent observations
+    count for more (WLS), letting beta drift as the relationship changes; set it
+    to None for ordinary least squares over the whole sample.
 
-    Returns alpha and beta annualised, plus residual variance.
+    We return alpha and beta annualised, together with the residual variance.
     """
     df = pd.concat([asset_returns, market_returns], axis=1).dropna()
     if len(df) < 30:
@@ -116,7 +116,7 @@ def capm_regression(asset_returns: pd.Series, market_returns: pd.Series,
     X = np.column_stack([np.ones(len(x)), x])
 
     if alpha_ewma is not None:
-        # Exponentially decaying weights, most recent observation weighted 1.
+        # Exponentially decaying weights; the most recent observation weighs 1.
         w = (1 - alpha_ewma) ** np.arange(len(x))[::-1]
         w = w / w.sum() * len(w)
         W = np.sqrt(w)[:, None]
@@ -140,16 +140,16 @@ def capm_expected_returns(returns: pd.DataFrame, market_returns: pd.Series,
                           include_alpha: bool = False) -> pd.Series:
     """Expected returns from CAPM: E[R_i] = rf + beta_i * (E[R_M] - rf).
 
-    The motivation for routing expected returns through CAPM rather than using
-    historical averages is that betas are estimated far more precisely than
-    means. You replace N noisy mean estimates with N reasonably-stable betas
-    plus ONE market premium estimate. That is a large reduction in the number of
-    badly-estimated quantities, and mean-variance optimisation is acutely
-    sensitive to exactly those.
+    We route expected returns through CAPM rather than through historical
+    averages because betas are estimated far more precisely than means: N noisy
+    mean estimates are replaced by N reasonably-stable betas plus ONE market
+    premium estimate. That is a large reduction in the count of badly-estimated
+    quantities, and mean-variance optimisation is acutely sensitive to exactly
+    those.
 
-    `include_alpha=False` by default, deliberately. Historical alpha is mostly
-    noise, and feeding it in reintroduces precisely the estimation error CAPM
-    was brought in to avoid.
+    `include_alpha=False` by default, deliberately: historical alpha is mostly
+    noise, and feeding it in reintroduces precisely the estimation error CAPM was
+    brought in to avoid.
     """
     if market_premium is None:
         market_premium = float(market_returns.mean() * TRADING_DAYS - risk_free)
@@ -183,15 +183,15 @@ def optimise_portfolio(expected_returns, cov_matrix, risk_free: float = 0.02,
     Notes
     -----
     `objective='variance'` deserves attention: the minimum-variance portfolio
-    uses NO expected-return input at all. Since expected returns are the
-    least reliable input, dropping them removes the dominant source of error,
-    and minimum-variance portfolios have historically delivered better
-    out-of-sample Sharpe ratios than max-Sharpe ones. Optimising for Sharpe
-    tends to produce a worse Sharpe. That is not a paradox, just a reminder
-    that the objective is evaluated on estimates, not on truth.
+    uses NO expected-return input at all. Since expected returns are the least
+    reliable input, dropping them removes the dominant source of error, and
+    minimum-variance portfolios have historically delivered better out-of-sample
+    Sharpe ratios than max-Sharpe ones. Optimising for Sharpe tends to produce a
+    worse Sharpe; that is not a paradox, merely a reminder that the objective is
+    evaluated on estimates rather than on truth.
 
-    SLSQP is run from several starting points because the Sharpe objective is
-    not convex and can have local optima.
+    SLSQP is run from several starting points because the Sharpe objective is not
+    convex and can have local optima.
     """
     mu = np.asarray(expected_returns, dtype=float)
     Sigma = np.asarray(cov_matrix, dtype=float)
@@ -208,7 +208,7 @@ def optimise_portfolio(expected_returns, cov_matrix, risk_free: float = 0.02,
             f"Infeasible: {n} assets at max_weight={max_weight} allow at most "
             f"{n*max_weight:.2f} < 1.0 of capital.")
 
-    # Guard against a singular covariance matrix (perfectly collinear assets).
+    # Ridge the diagonal: a singular covariance (i.e., collinear assets) breaks SLSQP.
     Sigma = Sigma + np.eye(n) * 1e-10
 
     def neg_sharpe(w):
@@ -264,8 +264,8 @@ def efficient_frontier(expected_returns, cov_matrix, n_points: int = 25,
                        min_weight: float = 0.0, max_weight: float = 1.0) -> pd.DataFrame:
     """Trace the efficient frontier: minimum variance at each target return.
 
-    Returns a frame with target_return, volatility and the weights, suitable
-    for plotting the classic risk/return curve.
+    We return a frame of target_return, volatility, and weights, ready for
+    plotting the classic risk/return curve.
     """
     mu = np.asarray(expected_returns, dtype=float)
     Sigma = np.asarray(cov_matrix, dtype=float) + np.eye(len(mu)) * 1e-10
@@ -302,23 +302,22 @@ def efficient_frontier(expected_returns, cov_matrix, n_points: int = 25,
 
 @dataclass
 class MeanVarianceOptimiser:
-    """Rolling mean-variance sizing, wired for quantlab's backtester.
+    """Rolling mean-variance sizing, wired into quantlab's backtester.
 
-    Produces a date x symbol weight matrix from a price history, re-optimising
-    on a fixed calendar and holding weights in between.
+    Produces a date x symbol weight matrix from a price history, re-optimising on
+    a fixed calendar and holding the weights in between.
 
-    CAUSALITY: at each rebalance date, only returns strictly BEFORE that date
-    are used. The optimiser never sees the period it is about to be graded on.
+    CAUSALITY: at each rebalance date, only returns strictly BEFORE that date are
+    used; the optimiser never sees the period it is about to be graded on.
 
-    Calendar note: rebalance dates are the last AVAILABLE session in each
-    period, not the calendar period end -- otherwise a quarter ending on a
-    weekend or holiday would silently lose its rebalance. One consequence is
-    that if the price history stops mid-period, the final day counts as that
-    partial period's last session and triggers a rebalance. That is intended
-    (live, you want to act on the latest close) and is not look-ahead, since
-    the estimate still uses only prior data. `test_optimiser_weights_are_causal`
-    pins this down: divergence under truncation is permitted on that final row
-    and nowhere else.
+    Calendar note: rebalance dates are the last AVAILABLE session in each period,
+    not the calendar period end, since otherwise a quarter ending on a weekend or
+    a holiday would silently lose its rebalance. One consequence is that if the
+    price history stops mid-period, the final day counts as that partial period's
+    last session and triggers a rebalance. That is intended (live, we want to act
+    on the latest close) and is not look-ahead, because the estimate still uses
+    only prior data. `test_optimiser_weights_are_causal` pins this down:
+    divergence under truncation is permitted on that final row and nowhere else.
     """
 
     lookback: int = 252
@@ -364,7 +363,7 @@ class MeanVarianceOptimiser:
 
         for dt in prices.index:
             if dt in rebal_set:
-                # Strictly before dt -- the rebalance cannot use its own bar.
+                # Strictly before dt: the rebalance cannot use its own bar.
                 window = returns.loc[:dt].iloc[:-1].tail(self.lookback)
                 window = window.dropna(axis=1, how="all")
                 if len(window) >= max(30, self.lookback // 4) and window.shape[1] >= 2:

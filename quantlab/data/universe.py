@@ -1,11 +1,11 @@
-"""Layer 1 - Universe definition.
+"""Layer 1, universe definition.
 
 QA Section A: "Universe definition is explicit (what symbols, when, and why)."
 
-A `Universe` is not just a ticker list. It records *why* those tickers, and
-whether membership is point-in-time. That distinction is the whole survivorship
-bias question: a static list of today's S&P 500 members, backtested to 2010, is
-a list of companies that we know in advance survived and thrived.
+A `Universe` is not merely a ticker list; rather, it records *why* those tickers
+and whether membership is point-in-time. That distinction is the whole
+survivorship bias question: a static list of today's S&P 500 members, backtested
+to 2010, is a list of companies we already know survived and thrived.
 """
 
 from __future__ import annotations
@@ -25,11 +25,11 @@ class Universe:
     ----------
     name        : short identifier used in reports.
     symbols     : the static ticker list (used when `membership` is None).
-    rationale   : free text -- why these names. Forced field; the QA layer
+    rationale   : free text stating why these names. Required; the QA layer
                   fails the run if it is empty.
     membership  : optional point-in-time membership matrix (date x symbol, bool).
                   When supplied, the universe is survivorship-safe and the
-                  backtester will only hold a name on dates where it was a member.
+                  backtester holds a name only on dates where it was a member.
     """
 
     name: str
@@ -53,7 +53,7 @@ class Universe:
         return self.membership is not None
 
     def active_on(self, date) -> list[str]:
-        """Symbols tradable on `date`."""
+        """Symbols tradable on `date`, falling back to the most recent prior membership row."""
         if self.membership is None:
             return list(self.symbols)
         date = pd.Timestamp(date)
@@ -66,7 +66,7 @@ class Universe:
         return list(row[row.astype(bool)].index)
 
     def mask_for(self, index: pd.DatetimeIndex, columns: Sequence[str]) -> pd.DataFrame:
-        """Boolean date x symbol tradability mask aligned to a price frame."""
+        """Boolean date x symbol tradability mask, aligned to a price frame's index and columns."""
         if self.membership is None:
             return pd.DataFrame(True, index=index, columns=list(columns))
         m = self.membership.reindex(index=index, columns=list(columns))
@@ -83,8 +83,8 @@ class Universe:
 
 
 # --------------------------------------------------------------------------
-# Prebuilt universes. Deliberately small and liquid: the point of a reference
-# universe is to make the plumbing testable, not to be a production selection.
+# Prebuilt universes, deliberately small and liquid: a reference universe exists
+# to make the plumbing testable, not to stand in for a production selection.
 # --------------------------------------------------------------------------
 
 MEGA_CAP_TECH = Universe(

@@ -3,7 +3,9 @@
 
     python examples/run_backtest.py
 
-Requires a network connection on first run; results are cached afterward.
+The first run needs a network connection to fetch prices; afterwards everything is served
+from the on-disk cache. Set ``data_source="synthetic"`` in the config below to skip the
+network entirely (useful on a machine with no outbound access, and for reproducible tests).
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ def main() -> int:
         strategy_params={"lookback": 252, "skip": 21, "top_n": 3},
         start="2012-01-01",
         end="2024-12-31",
-        cost_preset="large_cap_equity",   # 10bps one-way
+        cost_preset="large_cap_equity",   # 10 bps one-way, charged on traded notional
         rebalance="M",
         sizing="equal_weight",
         max_position=0.40,

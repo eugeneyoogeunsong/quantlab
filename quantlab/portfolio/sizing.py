@@ -1,10 +1,10 @@
-"""Layer 4 - Position sizing (QA Section E).
+"""Layer 4: position sizing (QA Section E).
 
-A signal says *what* to hold. Sizing says *how much*, and it is usually the
-larger determinant of the equity curve's shape. Equal-weighting a portfolio
-containing both a Treasury ETF and a leveraged commodity fund means the
-commodity supplies nearly all the risk and nearly all the P&L -- your careful
-signal work is then mostly decoration.
+A signal says *what* to hold; sizing says *how much*, and it is usually the
+larger determinant of the equity curve's shape. Equal-weighting a portfolio that
+contains both a Treasury ETF and a leveraged commodity fund means the commodity
+supplies nearly all the risk and nearly all the P&L, at which point the careful
+signal work is mostly decoration.
 
 Every function here is causal: all volatility and correlation estimates use
 trailing windows only.
@@ -19,9 +19,9 @@ TRADING_DAYS = 252
 
 
 def equal_weight(signal_mask: pd.DataFrame) -> pd.DataFrame:
-    """1/N across selected names. The honest baseline.
+    """1/N across the selected names. The honest baseline.
 
-    Hard to beat out-of-sample. Optimisation-based schemes have more parameters
+    Hard to beat out of sample: optimisation-based schemes have more parameters
     to estimate and therefore more ways to be wrong.
     """
     sel = signal_mask.astype(bool)
@@ -31,11 +31,11 @@ def equal_weight(signal_mask: pd.DataFrame) -> pd.DataFrame:
 
 def inverse_volatility(signal_mask: pd.DataFrame, prices: pd.DataFrame,
                        window: int = 63, min_vol: float = 1e-4) -> pd.DataFrame:
-    """Weight inversely to trailing volatility -- naive risk parity.
+    """Weight inversely to trailing volatility (i.e., naive risk parity).
 
-    Each position contributes roughly equal risk, assuming correlations are
+    Each position then contributes roughly equal risk, assuming correlations are
     similar. Cheap, stable, and it captures most of what full risk parity offers
-    without needing a covariance matrix.
+    without ever forming a covariance matrix.
     """
     vol = prices.pct_change(fill_method=None).rolling(window).std() * np.sqrt(TRADING_DAYS)
     vol = vol.clip(lower=min_vol)
@@ -47,19 +47,19 @@ def inverse_volatility(signal_mask: pd.DataFrame, prices: pd.DataFrame,
 def volatility_target(weights: pd.DataFrame, prices: pd.DataFrame,
                       target_vol: float = 0.10, window: int = 63,
                       max_leverage: float = 1.5, min_leverage: float = 0.0) -> pd.DataFrame:
-    """Scale the whole book so forecast portfolio vol hits a target.
+    """Scale the whole book so that forecast portfolio vol hits a target.
 
     Position size becomes inversely proportional to recent volatility: the book
     shrinks automatically in turbulent markets and expands in calm ones. This is
     the single most effective risk control in the library, because volatility is
-    genuinely persistent -- calm weeks cluster, turbulent weeks cluster.
+    genuinely persistent (calm weeks cluster, turbulent weeks cluster).
 
-    The catch is that it is backward-looking. It de-risks *after* volatility has
-    already risen, so it does not protect against a one-day gap. It protects
-    against the sustained turbulence that usually follows.
+    The catch is that it is backward-looking: it de-risks *after* volatility has
+    already risen, so it offers no protection against a one-day gap. What it does
+    protect against is the sustained turbulence that usually follows.
     """
     rets = prices.pct_change(fill_method=None)
-    # Portfolio vol using yesterday's weights -- shift to keep it causal.
+    # Portfolio vol from yesterday's weights; the shift is what keeps it causal.
     port_ret = (weights.shift(1) * rets).sum(axis=1)
     realized = port_ret.rolling(window).std() * np.sqrt(TRADING_DAYS)
     scale = (target_vol / realized.replace(0, np.nan)).clip(min_leverage, max_leverage)
@@ -69,20 +69,21 @@ def volatility_target(weights: pd.DataFrame, prices: pd.DataFrame,
 
 def risk_parity(signal_mask: pd.DataFrame, prices: pd.DataFrame,
                 window: int = 126, n_iter: int = 60) -> pd.DataFrame:
-    """Equal risk contribution using the trailing covariance matrix.
+    """Equal risk contribution from the trailing covariance matrix.
 
-    Solved iteratively rather than by an optimiser -- fewer dependencies and it
-    converges reliably for long-only weights.
+    Solved by fixed-point iteration rather than by an optimiser: fewer
+    dependencies, and it converges reliably for long-only weights.
 
-    Honest caveat: covariance estimated from 126 daily observations across N
-    assets is noisy, and it gets worse as N grows. Below ~10 assets this is
-    reasonable; above ~30 you are mostly estimating noise and inverse-vol is the
-    more defensible choice.
+    Honest caveat: a covariance estimated from 126 daily observations across N
+    assets is noisy, and it degrades as N grows. Below roughly 10 assets this is
+    reasonable; above roughly 30 you are mostly estimating noise, and inverse-vol
+    is the more defensible choice.
     """
     out = pd.DataFrame(0.0, index=prices.index, columns=prices.columns)
     rets = prices.pct_change(fill_method=None)
 
     # Recompute monthly: daily re-solves add turnover without adding information.
+    # (The covariance barely moves day to day, so the extra trading buys nothing.)
     rebal_dates = pd.Series(prices.index, index=prices.index).groupby(
         pd.Grouper(freq="ME")).max().dropna()
 
@@ -111,7 +112,7 @@ def risk_parity(signal_mask: pd.DataFrame, prices: pd.DataFrame,
 
 
 def _solve_risk_parity(cov: np.ndarray, n_iter: int = 60) -> np.ndarray:
-    """Fixed-point iteration toward equal risk contribution."""
+    """Fixed-point iteration towards equal risk contribution."""
     n = cov.shape[0]
     w = np.ones(n) / n
     for _ in range(n_iter):
@@ -130,11 +131,11 @@ def _solve_risk_parity(cov: np.ndarray, n_iter: int = 60) -> np.ndarray:
 
 def kelly_fraction(returns: pd.Series, window: int = 252,
                    fraction: float = 0.25, cap: float = 1.0) -> pd.Series:
-    """Fractional Kelly leverage from trailing mean and variance.
+    """Fractional Kelly leverage from the trailing mean and variance.
 
     Full Kelly maximises long-run growth but produces drawdowns almost nobody
-    tolerates in practice -- and it assumes you know the true mean return, which
-    you emphatically do not. Quarter-Kelly is the common compromise: roughly 75%
+    tolerates in practice, and it assumes you know the true mean return, which
+    you emphatically do not. Quarter-Kelly is the usual compromise: roughly 75%
     of the growth at a fraction of the volatility.
     """
     mu = returns.rolling(window).mean() * TRADING_DAYS
@@ -149,9 +150,9 @@ def mean_variance(signal_mask: pd.DataFrame, prices: pd.DataFrame,
                   **kwargs) -> pd.DataFrame:
     """Markowitz mean-variance weights, restricted to the selected names.
 
-    Delegates to `portfolio.optimisation`. Unlike the heuristics above this
-    needs an expected-return estimate, which is the least reliable input in
-    quantitative finance -- see that module's docstring before trusting it.
+    Delegates to `portfolio.optimisation`. Unlike the heuristics above, this needs
+    an expected-return estimate, which is the least reliable input in quantitative
+    finance: read that module's docstring before trusting the output.
 
     `objective='variance'` sidesteps the problem by ignoring expected returns
     entirely, and historically tends to do better out of sample.
@@ -182,7 +183,7 @@ SIZERS = {
 
 def apply_sizing(signal_mask: pd.DataFrame, prices: pd.DataFrame,
                  method: str = "equal_weight", **kwargs) -> pd.DataFrame:
-    """Dispatch to a sizing scheme by name."""
+    """Dispatch to a sizing scheme by name; see SIZERS for what is available."""
     if method == "equal_weight":
         return equal_weight(signal_mask)
     if method == "inverse_vol":

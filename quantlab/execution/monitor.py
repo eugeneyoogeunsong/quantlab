@@ -1,14 +1,14 @@
-"""Layer 5 - Monitoring. Answering "how do you know when a strategy is dying?"
+"""Layer 5: monitoring, i.e., answering "how do you know when a strategy is dying?"
 
 That question appears in the blueprint's Q&A section, and it is the hardest one,
-because the answer has to distinguish two things that look identical in the
-short run: a normal drawdown, and a broken edge.
+because the answer has to separate two things that look identical over the short
+run: a normal drawdown, and a broken edge.
 
-The approach here is to compare live results against the backtest's *own*
-distribution. A drawdown is unremarkable if the backtest produced several like
-it. The same drawdown is a red flag if the backtest never saw anything close.
+We therefore compare live results against the backtest's *own* distribution. A
+drawdown is unremarkable if the backtest produced several like it; the same
+drawdown is a red flag if the backtest never saw anything close.
 
-Nothing here is a trading signal by itself. These are prompts to investigate.
+Nothing here is a trading signal by itself: these are prompts to investigate.
 """
 
 from __future__ import annotations
@@ -40,10 +40,10 @@ class Alert:
 
 @dataclass
 class StrategyMonitor:
-    """Compares live returns to the backtest baseline.
+    """Compares live returns against the backtest baseline.
 
-    `baseline_returns` should be the out-of-sample series if you have one.
-    Comparing live results to an in-sample backtest sets the bar too high and
+    `baseline_returns` should be the out-of-sample series wherever one exists:
+    comparing live results to an in-sample backtest sets the bar too high and
     guarantees a stream of false alarms.
     """
 
@@ -57,8 +57,8 @@ class StrategyMonitor:
         self.baseline_sharpe = M.sharpe_ratio(b)
         self.baseline_vol = M.volatility(b)
         self.baseline_max_dd = M.max_drawdown(b)
-        # Distribution of rolling 63-day drawdowns in the backtest, so "unusual"
-        # is defined by history rather than by a round number someone liked.
+        # Distribution of rolling 63-day drawdowns in the backtest, so that
+        # "unusual" is defined by history, not by a round number someone liked.
         dd = M.drawdown_series(b)
         self.dd_threshold = float(np.quantile(dd, 1 - self.dd_percentile)) if len(dd) else -0.2
 
@@ -71,7 +71,7 @@ class StrategyMonitor:
 
         alerts: list[Alert] = []
 
-        # 1. Drawdown vs. what the backtest ever produced
+        # (i) Drawdown, judged against the worst the backtest ever produced
         live_dd = M.max_drawdown(live)
         if live_dd < self.baseline_max_dd:
             alerts.append(Alert("alert", "drawdown",
@@ -84,7 +84,7 @@ class StrategyMonitor:
                 "of the backtest distribution. Unusual but not unprecedented.",
                 live_dd, self.dd_threshold))
 
-        # 2. Sharpe decay
+        # (ii) Sharpe decay relative to the baseline, reported with its standard error
         live_sharpe = M.sharpe_ratio(live)
         floor = self.baseline_sharpe * self.sharpe_floor_ratio
         if self.baseline_sharpe > 0 and live_sharpe < floor:
@@ -95,7 +95,7 @@ class StrategyMonitor:
                 f"{1/np.sqrt(max(len(live)/252, 0.1)):.2f} -- this may still be noise.",
                 live_sharpe, floor))
 
-        # 3. Volatility regime shift
+        # (iii) Volatility regime shift, which invalidates the calibrated position sizes
         live_vol = M.volatility(live)
         if self.baseline_vol > 0:
             ratio = live_vol / self.baseline_vol
@@ -105,7 +105,7 @@ class StrategyMonitor:
                     f"{self.baseline_vol:.1%}. Position sizes calibrated to the old "
                     "regime are now too large.", live_vol, self.baseline_vol * self.vol_ratio_limit))
 
-        # 4. Distribution shift (Kolmogorov-Smirnov)
+        # (iv) Distribution shift (two-sample Kolmogorov-Smirnov; scipy is optional here)
         try:
             from scipy import stats as sps
             ks, p = sps.ks_2samp(live.values, self.baseline_returns.dropna().values)
@@ -132,7 +132,7 @@ class StrategyMonitor:
 
 def turnover_drift(backtest_turnover: float, live_turnover: float,
                    tolerance: float = 0.30) -> Alert:
-    """Live turnover far above backtest means live costs exceed the modelled ones."""
+    """Flag live turnover running above the backtest: realised costs then exceed modelled."""
     if backtest_turnover <= 0:
         return Alert("ok", "turnover", "No backtest turnover baseline.")
     ratio = live_turnover / backtest_turnover

@@ -1,10 +1,10 @@
-"""Layer 3 - Performance and risk metrics (QA Section F).
+"""Layer 3: performance and risk metrics (QA Section F).
 
 Includes the deflated Sharpe ratio, which is the metric most likely to change
-your mind about a strategy. If you tried 200 parameter combinations and kept the
-best, its Sharpe is inflated by selection alone -- even if every candidate was
-pure noise. The DSR asks: given that I ran N trials, how surprising is this
-result really?
+your mind about a strategy: if you tried 200 parameter combinations and kept the
+best, its Sharpe is inflated by selection alone, even when every candidate was
+pure noise. The DSR asks the only question that settles it: given that we ran N
+trials, how surprising is this result?
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ TRADING_DAYS = 252
 
 # Standard deviations below this are treated as zero. A literal `sd == 0` test
 # does not work: np.std of a constant array returns ~1e-19 rather than exactly
-# 0.0, which produced a Sharpe of 3.7e16 for a flat return series. Any dispersion
-# below 1e-12 daily (~1.6e-10 annualised) is numerically indistinguishable from
-# none, and dividing by it is meaningless.
+# 0.0, which once produced a Sharpe of 3.7e16 for a flat return series. Any
+# dispersion below 1e-12 daily (~1.6e-10 annualised) is numerically
+# indistinguishable from none, so dividing by it is meaningless.
 _ZERO_VAR_TOL = 1e-12
 
 
@@ -46,8 +46,9 @@ def volatility(returns: pd.Series, periods_per_year: int = TRADING_DAYS) -> floa
 
 
 def sharpe_ratio(returns: pd.Series, rf: float = 0.0, periods_per_year: int = TRADING_DAYS) -> float:
-    """Annualised Sharpe. Note the standard error is roughly 1/sqrt(years):
-    over 5 years a Sharpe of 0.5 has a standard error near 0.45."""
+    """Annualised Sharpe. The standard error is roughly 1/sqrt(years), so over
+    5 years a Sharpe of 0.5 carries a standard error near 0.45: report the
+    horizon alongside the number, never the number on its own."""
     excess = returns - rf / periods_per_year
     sd = excess.std(ddof=1)
     if not np.isfinite(sd) or sd < _ZERO_VAR_TOL:
@@ -56,7 +57,7 @@ def sharpe_ratio(returns: pd.Series, rf: float = 0.0, periods_per_year: int = TR
 
 
 def sortino_ratio(returns: pd.Series, rf: float = 0.0, periods_per_year: int = TRADING_DAYS) -> float:
-    """Like Sharpe but penalises only downside deviation."""
+    """As Sharpe, except that only downside deviation is penalised."""
     excess = returns - rf / periods_per_year
     downside = excess[excess < 0]
     if len(downside) < 2:
@@ -85,9 +86,9 @@ def calmar_ratio(returns: pd.Series, periods_per_year: int = TRADING_DAYS) -> fl
 def max_drawdown_duration(returns: pd.Series) -> int:
     """Longest stretch, in periods, spent below a prior peak.
 
-    Often the more decision-relevant number than depth: a 25% drawdown that
-    recovers in four months is survivable; the same depth lasting three years
-    is what makes people abandon a system at the worst possible moment.
+    Usually the more decision-relevant number than depth: a 25% drawdown that
+    recovers within four months is survivable; the same depth lasting three
+    years is what makes people abandon a system at the worst possible moment.
     """
     dd = drawdown_series(returns)
     if len(dd) == 0:
@@ -105,7 +106,7 @@ def var_historical(returns: pd.Series, level: float = 0.05) -> float:
 
 
 def cvar_historical(returns: pd.Series, level: float = 0.05) -> float:
-    """Expected shortfall -- mean loss given you are already in the worst tail."""
+    """Expected shortfall: mean loss given that we are already in the worst tail."""
     if len(returns) == 0:
         return 0.0
     cutoff = returns.quantile(level)
@@ -118,7 +119,7 @@ def skewness(returns: pd.Series) -> float:
 
 
 def kurtosis(returns: pd.Series) -> float:
-    """Excess kurtosis. Normal = 0. Equity returns typically 3-8."""
+    """Excess kurtosis (normal = 0); equity returns typically sit between 3 and 8."""
     return float(stats.kurtosis(returns.dropna())) if len(returns.dropna()) > 3 else 0.0
 
 
@@ -157,9 +158,10 @@ def probabilistic_sharpe_ratio(returns: pd.Series, benchmark_sr: float = 0.0,
                                periods_per_year: int = TRADING_DAYS) -> float:
     """P(true Sharpe > benchmark_sr), adjusting for skew and fat tails.
 
-    Bailey & Lopez de Prado. A Sharpe of 1.0 from strongly negatively skewed,
-    fat-tailed returns is much weaker evidence than the same number from
-    well-behaved ones -- PSR makes that explicit.
+    Bailey & Lopez de Prado. A Sharpe of 1.0 earned from strongly negatively
+    skewed, fat-tailed returns is much weaker evidence than the same number
+    earned from well-behaved ones; PSR makes that difference explicit instead of
+    leaving it to judgement.
     """
     r = returns.dropna()
     n = len(r)
@@ -177,18 +179,19 @@ def probabilistic_sharpe_ratio(returns: pd.Series, benchmark_sr: float = 0.0,
 def deflated_sharpe_ratio(returns: pd.Series, n_trials: int,
                           trial_sr_std: float | None = None,
                           periods_per_year: int = TRADING_DAYS) -> float:
-    """PSR against the Sharpe you'd expect from the BEST of `n_trials` noise strategies.
+    """PSR against the Sharpe expected from the BEST of `n_trials` noise strategies.
 
-    Bailey & Lopez de Prado (2014). The mechanism: the expected maximum of N
-    draws from a zero-mean distribution grows with N. Test 100 variants of a
-    worthless strategy and the winner will still look good. DSR subtracts that
-    expected maximum before judging.
+    Bailey & Lopez de Prado (2014). The mechanism is straightforward: the
+    expected maximum of N draws from a zero-mean distribution grows with N, so
+    testing 100 variants of a worthless strategy still leaves a winner that looks
+    good. DSR subtracts that expected maximum before passing judgement.
 
-    Interpretation: DSR > 0.95 is the usual bar. Below ~0.5, the result is
+    Interpretation: DSR > 0.95 is the usual bar; below roughly 0.5, the result is
     consistent with having found nothing at all.
 
-    `n_trials` must be the HONEST count -- every parameter set you evaluated,
-    including the ones you discarded and the ones you tried before lunch.
+    `n_trials` must be the HONEST count: every parameter set evaluated, including
+    the ones discarded and the ones tried before lunch. Understating it is the
+    easiest way to make this function agree with you.
     """
     r = returns.dropna()
     n = len(r)
@@ -196,7 +199,7 @@ def deflated_sharpe_ratio(returns: pd.Series, n_trials: int,
         return float("nan")
 
     if trial_sr_std is None:
-        # Fall back to the asymptotic SE of an uninformative Sharpe estimate.
+        # Fall back on the asymptotic SE of an uninformative Sharpe estimate.
         trial_sr_std = 1.0 / np.sqrt(n - 1)
 
     euler = 0.5772156649015329
@@ -216,10 +219,11 @@ def deflated_sharpe_ratio(returns: pd.Series, n_trials: int,
 def min_track_record_length(returns: pd.Series, target_sr: float = 0.0,
                             confidence: float = 0.95,
                             periods_per_year: int = TRADING_DAYS) -> float:
-    """How many periods you'd need to be `confidence` sure the Sharpe beats target.
+    """How many periods we need before we are `confidence` sure the Sharpe beats target.
 
-    Frequently sobering. A Sharpe of 0.6 often needs 8-10 years of data before
-    you can distinguish it from zero at 95% confidence.
+    Frequently sobering: a Sharpe of 0.6 typically needs 8-10 years of data
+    before it can be distinguished from zero at 95% confidence, which is longer
+    than most research samples and far longer than most people's patience.
     """
     r = returns.dropna()
     if len(r) < 10:
@@ -240,7 +244,7 @@ def min_track_record_length(returns: pd.Series, target_sr: float = 0.0,
 def summarize(returns: pd.Series, benchmark: pd.Series | None = None,
               n_trials: int = 1, rf: float = 0.0,
               periods_per_year: int = TRADING_DAYS) -> dict:
-    """Full metric block. Everything QA Section F asks for, plus the honesty checks."""
+    """Full metric block: everything QA Section F asks for, plus the honesty checks."""
     r = returns.dropna()
     out = {
         "n_periods": int(len(r)),
@@ -283,7 +287,7 @@ def summarize(returns: pd.Series, benchmark: pd.Series | None = None,
 
 
 def monthly_returns_table(returns: pd.Series) -> pd.DataFrame:
-    """Year x month table of compounded returns. QA Section F."""
+    """Year x month table of compounded returns (QA Section F)."""
     if len(returns) == 0:
         return pd.DataFrame()
     m = (1 + returns).resample("ME").prod() - 1

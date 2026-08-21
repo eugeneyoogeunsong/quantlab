@@ -5,13 +5,13 @@ Original implementations by Adrian (Adrian.ph689), 2025, drawing on Shreve,
 
 The lattice discretises the underlying into up/down moves and works backwards
 from expiry, discounting under the risk-neutral measure. Its advantage over the
-closed form is that it can price American options, because at every node you
-can ask "is exercising now worth more than holding?" -- a question the
-Black-Scholes PDE has no room for.
+closed form is that it can price American options: at every node we can ask
+whether exercising now is worth more than holding, a question the Black-Scholes
+PDE has no room for.
 
 Analogy: Black-Scholes computes the value of a journey knowing only the
-destination. The lattice walks every fork in the road, which is the only way to
-notice that stopping early is sometimes better.
+destination, whilst the lattice walks every fork in the road, which is the only
+way to notice that stopping early is sometimes better.
 """
 
 from __future__ import annotations
@@ -27,7 +27,12 @@ __all__ = [
 
 
 def _crr_params(T: float, r: float, sigma: float, n_steps: int):
-    """Cox-Ross-Rubinstein up/down factors and risk-neutral probability."""
+    """Cox-Ross-Rubinstein up/down factors and the risk-neutral probability.
+
+    We set u = exp(sigma*sqrt(dt)) and d = 1/u, so the lattice recombines; p is
+    then fixed by requiring the discounted spot to be a martingale. A p outside
+    [0, 1] means the parameters do not admit a no-arbitrage lattice at all.
+    """
     dt = T / n_steps
     u = np.exp(sigma * np.sqrt(dt))
     d = 1.0 / u
@@ -55,7 +60,7 @@ def binomial_european(S0, K, T, r, sigma, n_steps: int = 500, option: str = "cal
 
     Converges to Black-Scholes as `n_steps` grows, but not monotonically: the
     error oscillates depending on whether the strike sits near a lattice node.
-    Averaging n and n+1 steps is a standard trick to damp it.
+    Averaging the n-step and (n+1)-step prices is the standard trick to damp it.
     """
     if n_steps < 1:
         raise ValueError("n_steps must be >= 1")
@@ -72,18 +77,18 @@ def binomial_european(S0, K, T, r, sigma, n_steps: int = 500, option: str = "cal
 
 
 def binomial_american(S0, K, T, r, sigma, n_steps: int = 500, option: str = "put") -> float:
-    """American option -- the same induction, plus an early-exercise test.
+    """American option: the same backward induction, plus an early-exercise test.
 
     At each node the holder takes the better of continuing or exercising:
 
         V = max(discounted expected value, intrinsic value)
 
-    For a non-dividend-paying underlying an American CALL is worth exactly the
-    same as its European twin -- exercising early throws away time value and
-    the interest earned on the strike, so it is never optimal. The American PUT
-    is genuinely worth more, because exercising frees up the strike in cash
-    early. Both facts are asserted in the tests, which makes this a real check
-    on the implementation rather than a comment.
+    For a non-dividend-paying underlying an American CALL is worth exactly what
+    its European twin is worth, since exercising early throws away both time
+    value and the interest earned on the strike, so it is never optimal. The
+    American PUT is genuinely worth more, because exercising frees up the strike
+    in cash early. Both facts are asserted in the tests, which makes this a real
+    check on the implementation rather than a comment.
     """
     if n_steps < 1:
         raise ValueError("n_steps must be >= 1")
@@ -113,7 +118,7 @@ def binomial_tree_full(S0, K, T, r, sigma, n_steps: int = 6,
     exercise : (n+1, n+1) bool, True where early exercise beats holding
                (all False when american=False)
 
-    Intended for small `n_steps` -- this is the teaching/diagnostic view. Use
+    Intended for small `n_steps`: this is the teaching and diagnostic view. Use
     `binomial_european` / `binomial_american` for actual pricing.
     """
     dt, u, d, p = _crr_params(T, r, sigma, n_steps)
@@ -140,26 +145,26 @@ def binomial_tree_full(S0, K, T, r, sigma, n_steps: int = 6,
     return stock, value, exercise
 
 
-# Broadie-Glasserman-Kou continuity-correction constant.
-# = -zeta(1/2)/sqrt(2*pi), where zeta is the Riemann zeta function.
+# Broadie-Glasserman-Kou continuity-correction constant, equal to
+# -zeta(1/2)/sqrt(2*pi), where zeta is the Riemann zeta function.
 BGK_BETA = 0.5825971579390106
 
 
 def trinomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500) -> float:
     """Up-and-out barrier call on a Ritchken (1995) stretched trinomial tree.
 
-    THIS is the lattice method to use for barriers. `binomial_up_and_out` is
-    kept for comparison but converges badly; see its docstring.
+    THIS is the lattice method to use for barriers; `binomial_up_and_out` is
+    kept for comparison, but it converges badly (see its docstring).
 
     The problem with a binomial tree
     --------------------------------
     A CRR lattice can only represent prices S0*u^k for integer k. The barrier
     almost never lands on one, so the barrier the lattice actually enforces is
     displaced by up to half a level. Barrier prices are acutely sensitive to
-    that displacement -- a 0.3% error in barrier location moved the price by
-    ~2% in testing.
+    that displacement: a 0.3% error in barrier location moved the price by ~2%
+    in testing.
 
-    You can fix the alignment by choosing u = (B/S0)^(1/m), but then u no
+    The alignment can be fixed by choosing u = (B/S0)^(1/m), but then u no
     longer equals exp(sigma*sqrt(dt)) and the lattice's effective volatility
     drifts by ~1%, which is just as damaging. With only two branches there are
     not enough free parameters to match the mean, the variance, AND the barrier
@@ -167,9 +172,9 @@ def trinomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500) -> float:
 
     Ritchken's solution
     -------------------
-    A third branch adds the missing degree of freedom. Introduce a stretch
-    parameter lambda >= 1 with up-move exp(lambda*sigma*sqrt(dt)), and choose
-    lambda so that exactly m up-moves land on the barrier:
+    A third branch supplies the missing degree of freedom. We introduce a
+    stretch parameter lambda >= 1 with up-move exp(lambda*sigma*sqrt(dt)), and
+    choose lambda so that exactly m up-moves land on the barrier:
 
         m = floor( ln(B/S0) / (sigma*sqrt(dt)) )
         lambda = ln(B/S0) / (m*sigma*sqrt(dt))
@@ -181,11 +186,11 @@ def trinomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500) -> float:
         pd = 1/(2*lambda^2) - (r - sigma^2/2)*sqrt(dt) / (2*lambda*sigma)
         pm = 1 - 1/lambda^2
 
-    Barrier aligned exactly, volatility matched exactly. Convergence becomes
+    Barrier aligned exactly, volatility matched exactly; convergence becomes
     smooth and roughly O(1/n).
 
-    Analogy: a binomial tree is a ruler with fixed markings -- to measure to a
-    line that falls between them you must either move the line or stretch the
+    Analogy: a binomial tree is a ruler with fixed markings, so to measure to a
+    line falling between them you must either move the line or stretch the
     ruler, and both distort something. The trinomial adds an adjustable marking.
     """
     if B <= K or S0 >= B:
@@ -199,7 +204,8 @@ def trinomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500) -> float:
 
     m = int(np.floor(log_ratio / (sigma * sqrt_dt)))
     if m < 1:
-        # Barrier is inside one step of spot: too coarse to resolve.
+        # Barrier sits within a single up-move of spot: the grid is too coarse
+        # to resolve it, so we decline to quote rather than return noise.
         return 0.0
     lam = log_ratio / (m * sigma * sqrt_dt)
 
@@ -216,8 +222,8 @@ def trinomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500) -> float:
     disc = np.exp(-r * dt)
     dx = lam * sigma * sqrt_dt
 
-    # Levels reachable at the final step, capped at the barrier level m.
-    # Anything at or above level m is knocked out, so we never need to carry it.
+    # Levels reachable at the final step, capped at the barrier level m: anything
+    # at or above level m is knocked out, so we never need to carry it.
     max_level = m                     # knocked out at exactly this level
     min_level = -n_steps
     levels = np.arange(min_level, max_level + 1)
@@ -227,7 +233,8 @@ def trinomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500) -> float:
     V[levels >= m] = 0.0              # knocked out
 
     for _ in range(n_steps):
-        # Node at level k moves to k+1 / k / k-1.
+        # A node at level k branches to k+1, k, and k-1; the rolls line those
+        # three destinations up so the step is one vectorised combination.
         up = np.roll(V, -1)
         up[-1] = 0.0
         down = np.roll(V, 1)
@@ -246,21 +253,21 @@ def binomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500,
     because comparing the two is instructive, and because the original study
     this code came from benchmarked exactly these methods against each other.
 
-    KNOWN LIMITATION -- do not mistake this for a bug
-    -------------------------------------------------
+    KNOWN LIMITATION (this is not a bug)
+    ------------------------------------
     The binomial price for a barrier option converges slowly and
     NON-MONOTONICALLY. Measured against the closed form, the error moved
     1.2e-1 -> 1.4e-2 -> 2.7e-2 as steps went 500 -> 2000 -> 5000: more work,
     worse answer.
 
-    The cause is structural, not a coding error. A CRR lattice can only take
-    the values S0*u^k, and the barrier generally falls between two of them, so
-    the barrier actually enforced is displaced by up to half a level. Changing
-    n_steps changes u, which moves that displacement erratically. Attempting to
-    fix it by choosing u = (B/S0)^(1/m) aligns the barrier but throws the
-    lattice's effective volatility off by ~1%, which does comparable damage.
-    Two branches simply do not provide enough freedom to satisfy both
-    constraints. Ritchken's trinomial adds a third and does.
+    The cause is structural, not a coding error. A CRR lattice can only take the
+    values S0*u^k, and the barrier generally falls between two of them, so the
+    barrier actually enforced is displaced by up to half a level; changing
+    n_steps changes u, which moves that displacement erratically. Fixing it by
+    choosing u = (B/S0)^(1/m) aligns the barrier but throws the lattice's
+    effective volatility off by ~1%, which does comparable damage. Two branches
+    simply do not provide enough freedom to satisfy both constraints; Ritchken's
+    trinomial adds a third and does.
 
     Two refinements ARE applied here, and both help:
 
@@ -273,8 +280,8 @@ def binomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500,
        shifting the lattice barrier to ``B*exp(-beta*sigma*sqrt(dt))`` with
        beta = -zeta(1/2)/sqrt(2*pi) ~ 0.5826. A lattice monitors the barrier
        only at its own timesteps, which makes knockout harder than under
-       continuous monitoring and biases the price upward; the shift compensates.
-       It vanishes as dt -> 0, so the limit is unchanged.
+       continuous monitoring and biases the price upward; the shift compensates
+       for that, and it vanishes as dt -> 0, so the limit is unchanged.
 
     Original implementation by Adrian (Adrian.ph689), 2025.
     """
@@ -290,12 +297,12 @@ def binomial_up_and_out(S0, K, B, T, r, sigma, n_steps: int = 500,
     disc = np.exp(-r * dt)
 
     def node_prices(step: int) -> np.ndarray:
-        """Prices at `step`, built from integer levels for exact comparisons."""
+        """Prices at `step`, built from integer levels so comparisons are exact."""
         levels = step - 2 * np.arange(step + 1)
         return S0 * u**levels
 
-    # Relative tolerance so a node mathematically ON the barrier is knocked out
-    # consistently rather than flickering with floating-point rounding.
+    # A relative tolerance, so a node mathematically ON the barrier is knocked
+    # out consistently rather than flickering with floating-point rounding.
     def alive(S_node: np.ndarray) -> np.ndarray:
         return S_node < B_eff * (1.0 - 1e-9)
 

@@ -1,7 +1,7 @@
 """Derivatives pricing.
 
-Options pricing by four independent routes -- analytic, lattice, PDE and
-simulation -- plus implied volatility inversion.
+Options priced by four independent routes (analytic, lattice, PDE, and
+simulation), plus implied volatility inversion.
 
 Original implementations by Adrian (Adrian.ph689), 2025, from a study
 benchmarking numerical methods against closed-form solutions. Refactored here
@@ -11,10 +11,10 @@ unchanged.
 Why four methods for the same number
 ------------------------------------
 Because agreement between independent methods is evidence, and disagreement is
-a bug report. The analytic Black-Scholes price is exact but exists only for
-simple payoffs. Binomial trees handle early exercise. Finite differences give
-the whole price surface. Monte Carlo handles path dependence and high
-dimensions. Where two of them overlap, they must agree -- and the test suite
+a bug report. The analytic Black-Scholes price is exact, but it exists only for
+simple payoffs; binomial trees handle early exercise; finite differences give
+the whole price surface; Monte Carlo handles path dependence and high
+dimensions. Wherever two of them overlap they must agree, and the test suite
 requires it.
 
     from quantlab.derivatives import black_scholes_call, binomial_european

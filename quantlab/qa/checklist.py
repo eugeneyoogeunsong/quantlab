@@ -1,15 +1,15 @@
 """The Backtest QA Checklist, as executable code.
 
-Sections A-G from the source checklist, each mapped to a check that either
+Sections A to G of the source checklist, each mapped to a check that either
 inspects the run or actively tries to break it.
 
-The design intent: a backtest is not a result until it has a QA report attached.
+The design intent: a backtest is not a result until it carries a QA report.
 `QAReport.gate()` raises on any FAIL, so a broken run cannot quietly become a
 number in a slide deck.
 
-Section G is the one that matters most: "If performance collapses when you add
-costs, test OOS, or change parameters, it's probably not robust." That is
-implemented as a real, run-it-and-see verdict, not a reminder.
+Section G is the section that matters most: "If performance collapses when you
+add costs, test OOS, or change parameters, it's probably not robust." We
+implement that as a real, run-it-and-see verdict, not as a reminder.
 """
 
 from __future__ import annotations
@@ -27,11 +27,11 @@ TRADING_DAYS = 252
 
 
 # ---------------------------------------------------------------------------
-# Section B -- Bias + Leakage
+# Section B: bias and leakage, i.e., the failures that flatter a backtest most
 # ---------------------------------------------------------------------------
 
 def check_execution_lag(config) -> Check:
-    """B1: No look-ahead bias -- signals only use information available at the time."""
+    """B1: no look-ahead bias; a signal may only use information available at the time."""
     lag = getattr(config, "execution_lag", 0)
     if lag < 1:
         return Check("B", "Execution lag", "fail",
@@ -44,26 +44,26 @@ def check_execution_lag(config) -> Check:
 
 def check_weight_causality(weights: pd.DataFrame, returns_by_asset: pd.DataFrame,
                            threshold: float = 0.10) -> Check:
-    """B2: Empirical leakage test -- do today's weights anticipate today's returns?
+    """B2: empirical leakage test; do today's weights anticipate today's returns?
 
-    A causal strategy chose its weights before the bar's return existed, so the
-    contemporaneous cell-by-cell correlation should be small. Leakage produces a
+    A causal strategy fixed its weights before the bar's return existed, so the
+    contemporaneous cell-by-cell correlation should be small; leakage produces a
     large one.
 
-    Two design points that matter:
+    Two design points carry the test:
 
-    1. The correlation is computed over ALL cells, including zero weights, not
-       only held positions. Most strategies equal-weight their picks, so among
-       held cells the weight is a constant and the correlation is undefined --
-       an earlier version of this check silently degraded to "warn" on exactly
-       the strategies it most needed to test. Including the zeros restores the
-       variance: the question becomes "did held names outperform unheld names
-       on the same bar", which is precisely the leakage signature.
+    1. We compute the correlation over ALL cells, including the zero weights,
+       rather than over held positions alone. Most strategies equal-weight their
+       picks, so among held cells the weight is a constant and the correlation is
+       undefined; an earlier version of this check silently degraded to "warn" on
+       precisely the strategies it most needed to test. Including the zeros
+       restores the variance, and the question becomes "did held names outperform
+       unheld names on the same bar", which is exactly the leakage signature.
 
-    2. The threshold is not zero. A genuinely predictive strategy has a small
-       positive correlation -- that is what alpha looks like. Daily equity
-       signals typically land in 0.01-0.05. Leakage lands in 0.3+. The gap is
-       wide enough that 0.10 separates them cleanly.
+    2. The threshold is deliberately not zero. A genuinely predictive strategy
+       shows a small positive correlation: that is what alpha looks like. Daily
+       equity signals typically land in 0.01 to 0.05, whilst leakage lands at 0.3
+       and above; the gap is wide enough that 0.10 separates the two cleanly.
     """
     idx = weights.index.intersection(returns_by_asset.index)
     if len(idx) < 30:
@@ -107,7 +107,12 @@ def check_weight_causality(weights: pd.DataFrame, returns_by_asset: pd.DataFrame
 
 
 def check_no_future_features(strategy, prices: pd.DataFrame) -> Check:
-    """B3: Truncation test on the strategy's own weight generation."""
+    """B3: truncation test applied to the strategy's own weight generation.
+
+    We recompute the weights on the first 70% of the sample and compare them, cell
+    by cell, against the same dates taken from the full run: any divergence means
+    the strategy is reading data that did not yet exist on those dates.
+    """
     try:
         cut = int(len(prices) * 0.7)
         if cut < 50:
@@ -134,7 +139,7 @@ def check_no_future_features(strategy, prices: pd.DataFrame) -> Check:
 
 
 def check_rebalance_timing(config) -> Check:
-    """B5: Rebalance timing is realistic."""
+    """B5: rebalance timing is realistic, i.e., we could actually have traded it."""
     px = getattr(config, "execution_price", "close")
     lag = getattr(config, "execution_lag", 1)
     if px == "close" and lag >= 1:
@@ -148,11 +153,11 @@ def check_rebalance_timing(config) -> Check:
 
 
 # ---------------------------------------------------------------------------
-# Section C -- Validation
+# Section C: validation, i.e., evidence that the result survives outside the fit
 # ---------------------------------------------------------------------------
 
 def check_oos_reported(wf_result) -> Check:
-    """C1/C2: Walk-forward used, out-of-sample results reported."""
+    """C1/C2: walk-forward was run, and the out-of-sample results are the ones reported."""
     if wf_result is None:
         return Check("C", "Out-of-sample", "fail",
                      "No walk-forward run. In-sample results alone are not evidence.")
@@ -180,7 +185,7 @@ def check_oos_reported(wf_result) -> Check:
 
 
 def check_parameter_sensitivity(verdict: dict | None) -> Check:
-    """C3: Parameter sensitivity checked."""
+    """C3: parameter sensitivity checked; one lucky parameter set is not a result."""
     if verdict is None:
         return Check("C", "Parameter sensitivity", "fail",
                      "No parameter sweep run. A single parameter set proves nothing.")
@@ -193,7 +198,7 @@ def check_parameter_sensitivity(verdict: dict | None) -> Check:
 
 
 def check_regimes(verdict: dict | None) -> Check:
-    """C4: Tested across multiple market regimes."""
+    """C4: tested across multiple market regimes (bull, bear, and high-volatility)."""
     if verdict is None:
         return Check("C", "Regime coverage", "warn", "No regime analysis run.")
     v = verdict.get("verdict")
@@ -203,7 +208,7 @@ def check_regimes(verdict: dict | None) -> Check:
 
 
 def check_benchmark(stats: dict) -> Check:
-    """C5: Benchmark comparison included."""
+    """C5: benchmark comparison included, since absolute return alone says little."""
     if "benchmark_cagr" not in stats:
         return Check("C", "Benchmark", "fail",
                      "No benchmark supplied. Absolute returns are uninterpretable "
@@ -222,7 +227,7 @@ def check_benchmark(stats: dict) -> Check:
 
 
 def check_multiple_testing(stats: dict, min_dsr: float = 0.90) -> Check:
-    """C6: Deflated Sharpe -- correcting for how many things you tried."""
+    """C6: deflated Sharpe, i.e., the Sharpe corrected for how many variants we tried."""
     dsr = stats.get("deflated_sharpe", float("nan"))
     n = stats.get("n_trials_assumed", 1)
     if not np.isfinite(dsr):
@@ -244,11 +249,11 @@ def check_multiple_testing(stats: dict, min_dsr: float = 0.90) -> Check:
 
 
 # ---------------------------------------------------------------------------
-# Section D -- Trading Reality
+# Section D: trading reality, i.e., costs, turnover, and when orders actually fill
 # ---------------------------------------------------------------------------
 
 def check_costs_included(cost_model_name: str, result) -> Check:
-    """D1/D2: Transaction costs and slippage included and non-trivial."""
+    """D1/D2: transaction costs and slippage are both included, and non-trivial."""
     if cost_model_name == "zero":
         return Check("D", "Transaction costs", "fail",
                      "ZeroCost model. Every number in this report is fictional; "
@@ -262,7 +267,7 @@ def check_costs_included(cost_model_name: str, result) -> Check:
 
 
 def check_turnover_sanity(result, max_annual_turnover: float = 12.0) -> Check:
-    """D3: Liquidity/capacity awareness via turnover."""
+    """D3: liquidity and capacity awareness, proxied here by annualised turnover."""
     t = result.annual_turnover
     if t > max_annual_turnover:
         return Check("D", "Turnover", "warn",
@@ -275,7 +280,7 @@ def check_turnover_sanity(result, max_annual_turnover: float = 12.0) -> Check:
 
 
 def check_execution_specified(config) -> Check:
-    """D4: Execution timing is specified."""
+    """D4: execution timing is specified, not left to whatever the engine defaults to."""
     px = getattr(config, "execution_price", None)
     if px not in ("open", "close"):
         return Check("D", "Execution spec", "fail", f"execution_price={px!r} is not specified.")
@@ -284,11 +289,11 @@ def check_execution_specified(config) -> Check:
 
 
 # ---------------------------------------------------------------------------
-# Section E -- Risk & Portfolio Controls
+# Section E: risk and portfolio controls, both as configured and as observed
 # ---------------------------------------------------------------------------
 
 def check_risk_limits(limits, audit: pd.DataFrame | None = None) -> Check:
-    """E1-E3: Sizing rule, exposure limits, drawdown controls defined and honoured."""
+    """E1 to E3: sizing rule, exposure limits, and drawdown stop defined and honoured."""
     if limits is None:
         return Check("E", "Risk limits", "fail", "No RiskLimits configured.")
     if audit is not None and "breaches" in audit.columns:
@@ -308,7 +313,7 @@ def check_risk_limits(limits, audit: pd.DataFrame | None = None) -> Check:
 
 
 def check_rebalance_justified(config, result) -> Check:
-    """E4: Rebalance frequency justified."""
+    """E4: rebalance frequency justified against the turnover it generates."""
     freq = getattr(config, "rebalance", "?")
     t = result.annual_turnover
     return Check("E", "Rebalance frequency", "pass",
@@ -318,11 +323,11 @@ def check_rebalance_justified(config, result) -> Check:
 
 
 # ---------------------------------------------------------------------------
-# Section F -- Reporting
+# Section F: reporting, i.e., the metrics a reader needs before forming a view
 # ---------------------------------------------------------------------------
 
 def check_reporting_complete(stats: dict) -> Check:
-    """F1-F4: Required metrics present."""
+    """F1 to F4: the required metrics are present and finite."""
     required = ["cagr", "volatility", "sharpe", "max_drawdown", "max_dd_duration_days"]
     missing = [k for k in required if k not in stats or not np.isfinite(stats.get(k, np.nan))]
     if missing:
@@ -335,7 +340,7 @@ def check_reporting_complete(stats: dict) -> Check:
 
 
 def check_sample_adequacy(stats: dict, min_years: float = 3.0) -> Check:
-    """F5: Is the track record long enough to mean anything?"""
+    """F5: is the track record long enough for the reported Sharpe to mean anything?"""
     years = stats.get("years", 0)
     needed = stats.get("min_track_record_years", float("nan"))
     if years < min_years:
@@ -355,12 +360,17 @@ def check_sample_adequacy(stats: dict, min_years: float = 3.0) -> Check:
 
 
 # ---------------------------------------------------------------------------
-# Section G -- "If this fails, it fails here"
+# Section G: "If this fails, it fails here"
 # ---------------------------------------------------------------------------
 
 def check_robustness_triad(cost_v: dict | None, oos_check: Check,
                            param_v: dict | None) -> Check:
-    """G: The three-way stress test from the checklist's closing box."""
+    """G: the three-way stress test from the checklist's closing box.
+
+    We require survival on all three axes (costs, out-of-sample, and parameter
+    variation); a strategy that collapses on any one of them is not robust, and a
+    strategy that passes all three has cleared a necessary bar, not a sufficient one.
+    """
     failures, passes = [], []
 
     if cost_v:
@@ -391,12 +401,12 @@ def check_robustness_triad(cost_v: dict | None, oos_check: Check,
 
 
 # ---------------------------------------------------------------------------
-# Report
+# Report: the verdicts collected into one object that can gate a run
 # ---------------------------------------------------------------------------
 
 @dataclass
 class QAReport:
-    """Aggregated checklist verdicts."""
+    """Aggregated checklist verdicts, with the context in which they were produced."""
 
     checks: list[Check] = field(default_factory=list)
     context: dict[str, Any] = field(default_factory=dict)
@@ -429,7 +439,11 @@ class QAReport:
                 f"{len(self.warnings)} warning(s), {len(self.failures)} failure(s)")
 
     def gate(self, allow_warnings: bool = True) -> None:
-        """Raise if the run is not fit to be reported."""
+        """Raise if the run is not fit to be reported.
+
+        Any FAIL blocks unconditionally; set ``allow_warnings=False`` to block on
+        warnings too, which is the sensible setting in CI.
+        """
         if self.failures:
             lines = "\n".join(f"  - {c}" for c in self.failures)
             raise AssertionError(

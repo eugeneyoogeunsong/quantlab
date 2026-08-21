@@ -1,8 +1,13 @@
-"""Command-line interface.
+"""Command-line interface: one strategy in full, many strategies quickly, or today's orders.
 
     python -m quantlab.cli backtest --strategy xs_momentum --universe sector_etfs
     python -m quantlab.cli compare  --universe sector_etfs
     python -m quantlab.cli orders   --strategy ts_momentum --capital 100000
+
+``backtest`` runs the whole checklist and exits non-zero when the QA gate fails, so it drops
+straight into CI. ``compare`` and ``orders`` buy speed by skipping the expensive validation
+work; both say so in their own output, because a partial verdict quoted as a full one is how
+a research pipeline starts lying to its owner.
 """
 
 from __future__ import annotations
@@ -79,12 +84,12 @@ def cmd_compare(args) -> int:
             )
             pr = Pipeline(cfg).run()
 
-            # Compare mode deliberately skips walk-forward, the parameter sweep
-            # and cost sensitivity -- running them for every strategy is slow.
-            # Those Section C/G checks therefore report "fail" for want of
-            # evidence, which is correct in the full pipeline but misleading
-            # here: they were never run. Score only the checks that did run,
-            # and say so in the footer.
+            # Compare mode skips walk-forward, the parameter sweep and cost
+            # sensitivity on purpose: running all three for every strategy is
+            # slow. Those Section C/G checks then report "fail" for want of
+            # evidence, which is the right answer in the full pipeline and the
+            # wrong one here, since they were never run at all. We therefore
+            # score only the sections that did run, and say so in the footer.
             ran = [c for c in pr.qa.checks if c.section in ("A", "B", "D", "E", "F")]
             n_fail = sum(1 for c in ran if c.status == "fail")
 
@@ -120,7 +125,7 @@ def cmd_compare(args) -> int:
 
 
 def cmd_orders(args) -> int:
-    """Generate today's target orders from the latest signal. Paper only."""
+    """Target book implied by the latest signal, priced at the last close. Paper only."""
     from .execution.broker import generate_orders, write_order_blotter
 
     cfg = PipelineConfig(
@@ -137,7 +142,7 @@ def cmd_orders(args) -> int:
 
     orders = generate_orders(
         target_weights=latest_w,
-        current_positions={},           # assume flat; wire a broker for real state
+        current_positions={},           # assumed flat; wire a broker in for real state
         prices=latest_px,
         equity=args.capital,
     )

@@ -1,15 +1,15 @@
-"""Layer 3 - Transaction cost models (QA Section D).
+"""Layer 3: transaction cost models (QA Section D).
 
-Cost assumptions are where most backtests quietly die. A strategy that turns
-over 100% monthly and pays 20bps round-trip is handing over ~2.4%/yr before it
-earns anything -- often the entire alpha.
+Cost assumptions are where most backtests quietly die: a strategy that turns
+over 100% monthly and pays 20bps round trip hands over ~2.4%/yr before it earns
+anything, which is frequently the entire alpha.
 
 Reference points from the practitioner literature:
   - deep futures, institutional : ~5-7 bps round trip
   - liquid large-cap equities   : ~10-15 bps round trip (retail)
   - small caps                  : 20-50+ bps, spread-dominated
 
-Default here is 10 bps round-trip on large-cap equities (5 bps commission +
+We default to 10 bps round trip on large-cap equities (5 bps commission plus
 5 bps half-spread each way). The library refuses to run a zero-cost backtest
 without an explicit override, because "I forgot to add costs" and "costs are
 zero" produce identical numbers and only one of them is a decision.
@@ -28,16 +28,16 @@ class CostModel(Protocol):
     name: str
 
     def cost(self, turnover: pd.DataFrame, prices: pd.DataFrame, volume: pd.DataFrame | None) -> pd.DataFrame:
-        """Cost as a fraction of portfolio value, per date per symbol."""
+        """Cost as a fraction of portfolio value, per date and per symbol."""
         ...
 
 
 @dataclass
 class ZeroCost:
-    """No costs. For unit tests and for measuring the cost drag by difference.
+    """No costs at all: for unit tests, and for measuring cost drag by difference.
 
-    Never report a headline number from this. QA Section G exists because
-    performance that only survives at zero cost is not performance.
+    Never report a headline number from this. QA Section G exists precisely
+    because performance that survives only at zero cost is not performance.
     """
 
     name: str = "zero"
@@ -50,9 +50,9 @@ class ZeroCost:
 class FixedBpsCost:
     """Flat basis-point charge on traded notional.
 
-    `commission_bps` and `spread_bps` are ONE-WAY. A round-trip pays both twice.
-    Turnover here is already |w_t - w_{t-1}|, i.e. one-way notional traded, so
-    the per-unit charge is applied once per side automatically.
+    `commission_bps` and `spread_bps` are ONE-WAY; a round trip therefore pays
+    both twice. Turnover arriving here is already |w_t - w_{t-1}| (i.e., one-way
+    notional traded), so the per-unit charge lands once per side automatically.
     """
 
     commission_bps: float = 5.0
@@ -75,19 +75,19 @@ class FixedBpsCost:
 class SquareRootImpactCost:
     """Fixed cost plus a square-root market-impact term.
 
-    Impact grows with the square root of participation rate -- the standard
-    practitioner model. Trading 1% of daily volume costs far less than 10x the
-    cost of trading 0.1%; it costs about 3.2x.
+    Impact grows with the square root of the participation rate (the standard
+    practitioner model): trading 1% of daily volume does not cost ten times what
+    trading 0.1% costs, it costs about 3.2 times as much.
 
         impact_bps = coefficient * volatility * sqrt(order_size / daily_volume)
 
-    Analogy: a small boat barely disturbs the water. A ship ten times heavier
-    does not make ten times the wake -- but it does make a wake, and it has to
-    sail through its own.
+    The intuition is a wake. A small boat barely disturbs the water, and a ship
+    ten times heavier makes far less than ten times the wake; it does make one,
+    though, and it has to sail through it.
 
-    This is the model that reveals capacity limits. Run it at $100k and $100M
-    of AUM; if the edge only exists at $100k, that is worth knowing before you
-    scale.
+    This is the model that exposes capacity limits. Run it at $100k and at $100M
+    of AUM; if the edge exists only at $100k, that is worth knowing before we
+    scale rather than after.
     """
 
     commission_bps: float = 5.0
@@ -112,13 +112,13 @@ class SquareRootImpactCost:
 
 @dataclass
 class SlippageModel:
-    """Execution slippage separate from spread and commission.
+    """Execution slippage, kept separate from spread and commission.
 
     Two components:
-      - `fixed_bps`: baseline shortfall vs. the assumed fill price.
-      - `vol_multiple`: extra slippage proportional to that day's volatility.
-        You get worse fills on turbulent days, which is inconveniently when
-        most signals want to trade.
+      - `fixed_bps`: baseline shortfall against the assumed fill price.
+      - `vol_multiple`: additional slippage proportional to that day's
+        volatility. Fills get worse on turbulent days, which is inconveniently
+        when most signals want to trade.
     """
 
     fixed_bps: float = 2.0
@@ -135,7 +135,7 @@ class SlippageModel:
 
 @dataclass
 class CompositeCost:
-    """Sum several models. e.g. FixedBpsCost + SlippageModel."""
+    """Sum of several models (e.g., FixedBpsCost plus SlippageModel)."""
 
     models: list
     name: str = "composite"
@@ -147,8 +147,8 @@ class CompositeCost:
         return total
 
 
-# Named presets so a config file can say `cost_preset: retail_equity`
-# rather than scattering magic numbers through research code.
+# Named presets, so that a config file can say `cost_preset: retail_equity`
+# instead of scattering magic numbers through the research code.
 PRESETS = {
     "institutional_futures": FixedBpsCost(commission_bps=2.0, spread_bps=1.5),
     "large_cap_equity": FixedBpsCost(commission_bps=5.0, spread_bps=5.0),

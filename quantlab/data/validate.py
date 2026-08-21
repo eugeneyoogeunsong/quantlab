@@ -1,8 +1,8 @@
-"""Layer 1 - Data integrity validators (QA Checklist Section A).
+"""Layer 1, data integrity validators (QA Checklist Section A).
 
-Each function returns a `Check`. Nothing raises: the philosophy is that the QA
-report should surface *every* problem in one pass, not stop at the first.
-Severity decides whether the pipeline is allowed to continue.
+Each function returns a `Check` and nothing raises: the QA report should surface
+*every* problem in a single pass rather than stopping at the first. Severity, not
+the exception mechanism, then decides whether the pipeline may continue.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ Severity = Literal["pass", "warn", "fail"]
 
 @dataclass
 class Check:
-    """One checklist line item with its verdict and the evidence behind it."""
+    """One checklist line item: its verdict, and the evidence standing behind it."""
 
     section: str
     name: str
@@ -36,12 +36,12 @@ class Check:
 
 
 # ---------------------------------------------------------------------------
-# Section A -- Data Integrity
+# Section A: data integrity
 # ---------------------------------------------------------------------------
 
 
 def check_adjustment(source_name: str, auto_adjust: bool) -> Check:
-    """A1: Prices adjusted for splits/dividends (when appropriate)."""
+    """A1: prices adjusted for splits and dividends (where the vendor supports it)."""
     if auto_adjust:
         return Check(
             "A", "Split/dividend adjusted", "pass",
@@ -57,13 +57,13 @@ def check_adjustment(source_name: str, auto_adjust: bool) -> Check:
 
 
 def check_missing_dates(prices: pd.DataFrame, max_gap_days: int = 5) -> Check:
-    """A2a: No missing dates."""
+    """A2a: no missing sessions, i.e., gaps beyond `max_gap_days` calendar days."""
     idx = pd.DatetimeIndex(prices.index)
     if len(idx) < 2:
         return Check("A", "Calendar continuity", "fail", "Fewer than 2 rows of data.")
 
     gaps = idx.to_series().diff().dt.days.dropna()
-    # Weekends give a legitimate 3-day gap; holidays push to 4.
+    # A weekend is a legitimate 3-day gap; a holiday alongside it pushes that to 4.
     big = gaps[gaps > max_gap_days]
     if big.empty:
         return Check(
@@ -82,7 +82,7 @@ def check_missing_dates(prices: pd.DataFrame, max_gap_days: int = 5) -> Check:
 
 
 def check_missing_values(prices: pd.DataFrame, max_nan_frac: float = 0.10) -> Check:
-    """A2b: NaN density per symbol."""
+    """A2b: NaN density per symbol, measured as a fraction of all sessions."""
     frac = prices.isna().mean()
     bad = frac[frac > max_nan_frac].sort_values(ascending=False)
     if bad.empty:
@@ -101,11 +101,11 @@ def check_missing_values(prices: pd.DataFrame, max_nan_frac: float = 0.10) -> Ch
 
 
 def check_bad_ticks(prices: pd.DataFrame, threshold: float = 0.50) -> Check:
-    """A2c: Bad ticks -- implausible single-day moves.
+    """A2c: bad ticks, i.e., implausible single-day moves.
 
-    On adjusted data a >50% single-day move is rare but real (biotech readouts,
-    2020 energy). It is flagged, never auto-removed: silently deleting outliers
-    is itself a bias, and usually a flattering one.
+    On adjusted data a single-day move beyond 50% is rare but genuinely occurs
+    (biotech readouts, energy in 2020). We flag it and never auto-remove it:
+    silently deleting outliers is itself a bias, and usually a flattering one.
     """
     rets = prices.pct_change(fill_method=None)
     hits = rets.abs() > threshold
@@ -127,7 +127,11 @@ def check_bad_ticks(prices: pd.DataFrame, threshold: float = 0.50) -> Check:
 
 
 def check_survivorship(universe_is_pit: bool, source_survivorship_safe: bool) -> Check:
-    """A3 / B4: Survivorship bias addressed."""
+    """A3 / B4: survivorship bias addressed.
+
+    A clean pass requires both halves: point-in-time membership, and a vendor that
+    retains delisted history. One without the other still leaks.
+    """
     if universe_is_pit and source_survivorship_safe:
         return Check(
             "A", "Survivorship bias", "pass",
@@ -150,7 +154,7 @@ def check_survivorship(universe_is_pit: bool, source_survivorship_safe: bool) ->
 
 
 def check_monotonic_unique(prices: pd.DataFrame) -> Check:
-    """A4: Index sanity -- sorted, unique, tz-naive."""
+    """A4: index sanity (sorted ascending, free of duplicates, and timezone-naive)."""
     idx = pd.DatetimeIndex(prices.index)
     problems = []
     if not idx.is_monotonic_increasing:
@@ -165,7 +169,7 @@ def check_monotonic_unique(prices: pd.DataFrame) -> Check:
 
 
 def check_sufficient_history(prices: pd.DataFrame, min_obs: int, lookback: int) -> Check:
-    """A5: Enough history for the signal plus a meaningful test window."""
+    """A5: enough history to warm the signal up and still leave a meaningful test window."""
     n = len(prices)
     if n < lookback * 2:
         return Check(
@@ -198,7 +202,7 @@ def run_data_checks(
     lookback: int = 252,
     min_obs: int = 756,
 ) -> list[Check]:
-    """Run every Section A check and return the verdicts."""
+    """Run every Section A check and return the verdicts in report order."""
     return [
         check_adjustment(source_name, auto_adjust),
         check_monotonic_unique(prices),
@@ -215,12 +219,12 @@ def clean_prices(
     ffill_limit: int = 5,
     min_price: float = 1.0,
 ) -> pd.DataFrame:
-    """Conservative cleaning. Deliberately does very little.
+    """Conservative cleaning, deliberately doing very little.
 
-    - Forward-fill short holes only (`ffill_limit` sessions). A halted name that
-      never reopens should stay NaN, not carry a stale price forever.
-    - Never back-fill. Back-filling writes future information into the past --
-      it is look-ahead bias with a friendly name.
+    - Forward-fill short holes only (`ffill_limit` sessions): a halted name that
+      never reopens should stay NaN rather than carry a stale price forever.
+    - Never back-fill. Back-filling writes future information into the past; it
+      is look-ahead bias under a friendlier name.
     - Drop sub-$1 names, where the bid-ask spread swamps any realistic edge.
     """
     out = prices.copy()

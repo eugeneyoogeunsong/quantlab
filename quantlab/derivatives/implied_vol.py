@@ -4,13 +4,13 @@ Original implementation by Adrian (Adrian.ph689), 2025, following Wilmott,
 *Paul Wilmott Introduces Quantitative Finance*, Ch. 8. Refactored into library
 form with a bisection fallback added for robustness.
 
-Every other function in this package maps volatility to a price. This one runs
+Every other function in this package maps volatility to a price; this one runs
 the map backwards: given the price the market is actually quoting, what
 volatility does Black-Scholes need in order to agree?
 
 That number is not a forecast. It is the market's price expressed in different
-units -- and the fact that it differs across strikes (the smile) is precisely
-the market telling you Black-Scholes is wrong about lognormal returns.
+units, and the fact that it differs across strikes (the smile) is precisely the
+market telling us Black-Scholes is wrong about lognormal returns.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ __all__ = ["implied_volatility", "implied_vol_surface"]
 
 
 def _intrinsic_bounds(S, K, T, r, q, option):
-    """No-arbitrage bounds. Prices outside these have no implied vol at all."""
+    """No-arbitrage bounds; a price outside these has no implied vol at all."""
     disc, div = np.exp(-r * T), np.exp(-q * T)
     if option == "call":
         return max(S * div - K * disc, 0.0), S * div
@@ -41,16 +41,16 @@ def implied_volatility(price: float, S: float, K: float, T: float, r: float,
     Method
     ------
     Newton-Raphson first: it converges quadratically, using vega as the
-    derivative. But vega collapses to nearly zero for deep in- or
-    out-of-the-money options, and dividing by a near-zero derivative sends the
-    iteration somewhere useless. When that happens the function falls back to
-    bisection, which is slower but cannot diverge.
+    derivative. Vega collapses to nearly zero for deep in- or out-of-the-money
+    options, however, and dividing by a near-zero derivative sends the iteration
+    somewhere useless; when that happens we fall back to bisection, which is
+    slower but cannot diverge.
 
     The original implementation handled the same instability by retrying from
     several random starting guesses. Bisection is deterministic and provably
-    convergent on a bracketed root, so it is preferred here; the Brenner-
-    Subrahmanyam approximation supplies a good starting point instead of a
-    random one.
+    convergent on a bracketed root, so it is preferred here; the
+    Brenner-Subrahmanyam approximation then supplies a sensible starting point
+    instead of a random one.
     """
     if option not in ("call", "put"):
         raise ValueError(f"option must be 'call' or 'put', got {option!r}")
@@ -59,7 +59,8 @@ def implied_volatility(price: float, S: float, K: float, T: float, r: float,
 
     lower, upper = _intrinsic_bounds(S, K, T, r, q, option)
     if price < lower - 1e-10 or price > upper + 1e-10:
-        # Outside no-arbitrage bounds: no volatility reproduces this price.
+        # Outside the no-arbitrage bounds: no volatility reproduces this price,
+        # so we return NaN rather than a number that would look like an answer.
         return float("nan")
 
     pricer = black_scholes_call if option == "call" else black_scholes_put
@@ -67,7 +68,8 @@ def implied_volatility(price: float, S: float, K: float, T: float, r: float,
     if initial_guess is not None:
         sigma = initial_guess
     else:
-        # Brenner-Subrahmanyam: accurate near the money, adequate elsewhere.
+        # Brenner-Subrahmanyam: accurate near the money, adequate elsewhere, and
+        # clipped below so the first vega evaluation is never degenerate.
         sigma = max(np.sqrt(2 * np.pi / T) * price / S, 1e-3)
     sigma = float(np.clip(sigma, 1e-4, 5.0))
 
@@ -78,9 +80,9 @@ def implied_volatility(price: float, S: float, K: float, T: float, r: float,
             return float(sigma)
         v = float(vega(S, K, T, r, sigma, q))
         if v < 1e-10:
-            break  # derivative too flat; hand over to bisection
+            break  # derivative too flat to divide by; hand over to bisection
         step = diff / v
-        step = float(np.clip(step, -0.5, 0.5))  # damp wild jumps
+        step = float(np.clip(step, -0.5, 0.5))  # damp jumps a flat vega would produce
         sigma_new = sigma - step
         if sigma_new <= 0 or sigma_new > 5.0:
             break
@@ -93,7 +95,7 @@ def implied_volatility(price: float, S: float, K: float, T: float, r: float,
     f_lo = float(pricer(S, K, T, r, lo, q)) - price
     f_hi = float(pricer(S, K, T, r, hi, q)) - price
     if f_lo * f_hi > 0:
-        return float("nan")  # root not bracketed
+        return float("nan")  # root not bracketed on [1e-6, 5.0]
     for _ in range(200):
         mid = 0.5 * (lo + hi)
         f_mid = float(pricer(S, K, T, r, mid, q)) - price
@@ -119,7 +121,7 @@ def implied_vol_surface(prices, spots, expiries, K: float, r: float,
     Returns a matching 2-D array of implied vols, NaN where no solution exists.
 
     Plotted as a surface this is the standard visualisation of the volatility
-    smile/skew. A flat plane would mean Black-Scholes were exactly right; it
+    smile/skew: a flat plane would mean Black-Scholes were exactly right, and it
     never is.
     """
     prices = np.asarray(prices, dtype=float)

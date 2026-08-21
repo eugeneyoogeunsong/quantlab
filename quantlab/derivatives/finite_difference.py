@@ -5,13 +5,13 @@ library form; the dense matrix solve of the original has been replaced with a
 banded (tridiagonal) solver, which is the same arithmetic at O(n) instead of
 O(n^3) per timestep.
 
-Rather than simulating or enumerating outcomes, this solves the Black-Scholes
-PDE directly on a grid of (spot, time). The payoff is the initial condition and
-we integrate backwards from expiry.
+Rather than simulating or enumerating outcomes, we solve the Black-Scholes PDE
+directly on a grid of (spot, time): the payoff is the initial condition, and we
+integrate backwards from expiry.
 
-The reward for the extra machinery is that one solve gives you the option value
-at EVERY spot price, not just today's -- so delta and gamma come out as finite
-differences of a surface you already have, rather than requiring a re-run.
+The reward for the extra machinery is that a single solve gives the option value
+at EVERY spot price, not just today's, so delta and gamma come out as finite
+differences of a surface we already have rather than requiring a re-run.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ def _cn_coefficients(S_idx: np.ndarray, dt: float, r: float, sigma: float):
     """Crank-Nicolson coefficients for interior nodes.
 
     Averaging the explicit and implicit schemes gives second-order accuracy in
-    time and unconditional stability -- the explicit scheme alone is only stable
-    for very small timesteps.
+    time and unconditional stability; the explicit scheme on its own is stable
+    only for very small timesteps.
     """
     i = S_idx
     alpha = 0.25 * dt * (sigma**2 * i**2 - r * i)
@@ -41,7 +41,13 @@ def _cn_coefficients(S_idx: np.ndarray, dt: float, r: float, sigma: float):
 
 
 def _solve_cn(payoff, S, T, r, sigma, n_time, upper_boundary_fn, knockout_mask=None):
-    """Shared Crank-Nicolson time-stepping loop."""
+    """Shared Crank-Nicolson time-stepping loop.
+
+    We step in tau (time remaining to expiry), so `payoff` is the tau = 0 state
+    and `upper_boundary_fn` is evaluated at the tau of the step being solved for.
+    Passing `knockout_mask` zeroes the masked nodes after every step, which is
+    how a knockout barrier is imposed.
+    """
     n_space = len(S) - 1
     dt = T / n_time
     i = np.arange(1, n_space)
@@ -80,9 +86,9 @@ def crank_nicolson_european(S0, K, T, r, sigma, n_space: int = 400,
                             return_grid: bool = False):
     """European option by Crank-Nicolson.
 
-    `S_max` defaults to 4x the strike. It must be far enough out that the
-    boundary condition there is essentially exact; too close and the artificial
-    boundary contaminates the interior solution.
+    `S_max` defaults to four times the larger of `K` and `S0`. It must sit far
+    enough out that the boundary condition imposed there is essentially exact:
+    too close, and the artificial boundary contaminates the interior solution.
     """
     if option not in ("call", "put"):
         raise ValueError(f"option must be 'call' or 'put', got {option!r}")
@@ -100,8 +106,9 @@ def crank_nicolson_european(S0, K, T, r, sigma, n_space: int = 400,
             return 0.0
 
     if option == "put":
-        # For a put the informative boundary is at S=0, where V = K*exp(-r*tau).
-        # Solve on the reflected problem by swapping which end carries the data.
+        # For a put the informative boundary sits at S=0, where V = K*exp(-r*tau),
+        # and the value decays to zero at large S; we therefore swap which end of
+        # the grid carries the Dirichlet data and step the same scheme by hand.
         V = payoff.copy()
         dt = T / n_time
         i = np.arange(1, n_space)
@@ -133,22 +140,22 @@ def crank_nicolson_up_and_out(S0, K, B, T, r, sigma, n_space: int = 400,
     """Up-and-out barrier call by Crank-Nicolson.
 
     The barrier is a natural fit for the PDE approach: it is simply a Dirichlet
-    boundary at S = B where V = 0, and the grid is truncated there. No
-    correction term is needed, unlike the lattice (which needs Broadie-
-    Glasserman-Kou) or Monte Carlo (which needs a Brownian bridge). Putting the
-    domain boundary exactly on the barrier is the whole trick.
+    boundary at S = B where V = 0, and the grid is truncated there. No correction
+    term is needed, unlike the lattice (which needs Broadie-Glasserman-Kou) or
+    Monte Carlo (which needs a Brownian bridge). Putting the domain boundary
+    exactly on the barrier is the whole trick.
 
-    Original implementation by Adrian (Adrian.ph689), 2025, which used
-    Rannacher timestepping -- two fully-implicit half-steps before switching to
-    Crank-Nicolson -- to damp the oscillations caused by the kink in the payoff
-    at the strike. That start-up phase is preserved here.
+    Original implementation by Adrian (Adrian.ph689), 2025, which used Rannacher
+    timestepping (two fully-implicit steps before switching to Crank-Nicolson)
+    to damp the oscillations caused by the kink in the payoff at the strike.
+    That start-up phase is preserved here.
     """
     if B <= K or S0 >= B:
         return (0.0, np.array([]), np.array([])) if return_grid else 0.0
 
     S = _build_grid(B, n_space)          # domain ends exactly at the barrier
     payoff = np.maximum(S - K, 0.0)
-    payoff[-1] = 0.0                     # knocked out at the barrier
+    payoff[-1] = 0.0                     # the barrier node is knocked out, so V = 0
 
     dt = T / n_time
     i = np.arange(1, n_space)

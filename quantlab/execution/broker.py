@@ -1,9 +1,9 @@
-"""Layer 5 - Execution.
+"""Layer 5: execution.
 
 A paper broker plus an order generator that turns target weights into concrete,
-reviewable orders. The `Broker` protocol is what a live adapter (Alpaca, IBKR)
-would implement -- deliberately small, because the smaller the live surface, the
-less can go wrong at 09:30.
+reviewable orders. The `Broker` protocol is the surface a live adapter (e.g.,
+Alpaca, IBKR) implements, and we keep it deliberately small: the narrower the
+live surface, the less can go wrong at 09:30.
 
 Nothing here places real orders. That is a decision for the account holder, not
 for a backtesting library.
@@ -60,7 +60,11 @@ class Broker(Protocol):
 
 @dataclass
 class PaperBroker:
-    """In-memory broker for dry runs and integration tests."""
+    """In-memory broker for dry runs and integration tests.
+
+    Fills are synthetic: we mark against the last price passed to `mark()`, charge
+    `commission_bps`, and push the price `slippage_bps` against the order.
+    """
 
     cash: float = 1_000_000.0
     positions: dict[str, float] = field(default_factory=dict)
@@ -88,7 +92,7 @@ class PaperBroker:
             log.warning("no price for %s; order rejected", order.symbol)
             return None
 
-        # Slippage always works against you -- buys fill higher, sells lower.
+        # Slippage always works against the order: buys fill higher, sells lower.
         direction = 1 if order.side == "buy" else -1
         fill_px = px * (1 + direction * self.slippage_bps / 1e4)
         notional = abs(order.quantity) * fill_px
@@ -118,15 +122,15 @@ def generate_orders(
     min_trade_notional: float = 100.0,
     rebalance_threshold: float = 0.005,
 ) -> list[Order]:
-    """Diff target weights against current holdings into orders.
+    """Diff target weights against current holdings and emit the resulting orders.
 
-    Two filters that matter in production:
+    Two filters carry the weight in production:
 
-    `rebalance_threshold` -- ignore drift below 0.5% of the book. Without it you
-    will trade every day to correct rounding, paying full costs for weight
+    `rebalance_threshold` suppresses drift below 0.5% of the book; without it we
+    trade every single day to correct rounding, paying full costs for weight
     changes that are noise.
 
-    `min_trade_notional` -- skip trades too small to be worth the commission.
+    `min_trade_notional` drops trades too small to repay their own commission.
 
     Together these typically cut live turnover well below what the backtest
     assumed, which is the rare case of reality being kinder than the model.
@@ -165,8 +169,8 @@ def generate_orders(
 def write_order_blotter(orders: list[Order], path: str | Path) -> Path:
     """Persist orders as JSON. QA Section: live trading + logs.
 
-    An order file that predates execution is the only way to tell later whether
-    a bad day was a bad signal or a bad fill.
+    An order file written before execution is the only way to establish, after the
+    fact, whether a bad day came from a bad signal or from a bad fill.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

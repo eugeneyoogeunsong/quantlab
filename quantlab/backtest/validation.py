@@ -1,15 +1,15 @@
-"""Layer 3 - Validation (QA Checklist Section C).
+"""Layer 3: validation (QA Checklist Section C).
 
 Three tests, in increasing order of how often they kill a strategy:
 
-1. Walk-forward   -- does it work on data it was not fitted to?
-2. Regime split   -- does it work in more than one kind of market?
-3. Param sweep    -- does it work at parameters you did not pick?
+1. Walk-forward   : does it work on data it was not fitted to?
+2. Regime split   : does it work in more than one kind of market?
+3. Param sweep    : does it work at parameters you did not pick?
 
-Section G of the checklist says it plainly: if performance collapses when you
+Section G of the checklist says it plainly: if performance collapses once you
 add costs, test out-of-sample, or change parameters, it is probably not robust.
-These functions exist to produce that collapse early, on your laptop, rather
-than later, with money.
+These functions exist to produce that collapse early, on a laptop, rather than
+later, with money.
 """
 
 from __future__ import annotations
@@ -56,7 +56,8 @@ class WalkForwardResult:
         """Mean train Sharpe minus mean test Sharpe.
 
         Some decay is normal and expected. A large gap means the optimiser was
-        fitting noise -- it found patterns specific to the training window.
+        fitting noise: it found patterns specific to the training window, and
+        those patterns do not survive contact with the next one.
         """
         tr = np.nanmean([w.train_sharpe for w in self.windows])
         te = np.nanmean([w.test_sharpe for w in self.windows])
@@ -66,8 +67,8 @@ class WalkForwardResult:
     def consistency(self) -> float:
         """Fraction of test folds with a positive Sharpe.
 
-        Arguably more informative than the average: one enormous fold can carry
-        a mean while five of six folds lost money.
+        More informative than the average: one enormous fold can carry a mean
+        whilst five of the six folds lost money.
         """
         sr = [w.test_sharpe for w in self.windows if not np.isnan(w.test_sharpe)]
         return float(np.mean([s > 0 for s in sr])) if sr else 0.0
@@ -98,13 +99,14 @@ def walk_forward(
 ) -> WalkForwardResult:
     """Rolling (or anchored) walk-forward with an embargo gap.
 
-    The embargo is the subtle part. If your signal uses a 252-day lookback and
-    the test set begins the day after training ends, the first test observations
-    were computed from mostly-training data. They are not really out-of-sample.
-    The embargo drops a gap between the two so the leakage window closes.
+    The embargo is the subtle part. If the signal uses a 252-day lookback and the
+    test set begins the day after training ends, the first test observations were
+    computed mostly from training data; they are not really out-of-sample, and a
+    walk-forward that ignores this reports leakage as skill. The embargo drops a
+    gap between the two windows so that the leakage window closes.
 
-    `anchored=True` keeps the training start fixed and grows the window --
-    closer to how you would actually re-fit a live system over time.
+    `anchored=True` holds the training start fixed and grows the window, which is
+    closer to how we would actually re-fit a live system over time.
     """
     engine = engine or BacktestEngine()
     idx = pd.DatetimeIndex(prices.index)
@@ -154,9 +156,9 @@ def walk_forward(
             continue
 
         # --- evaluate on TEST, params frozen ---
-        # Prepend train tail so the signal has its lookback warmed up, then keep
-        # only the test-period returns. Without this the first months of every
-        # fold are contaminated by warm-up NaNs and read as flat.
+        # Prepend the train tail so that the signal's lookback is warmed up, then
+        # keep only the test-period returns. Without this, the first months of
+        # every fold are contaminated by warm-up NaNs and read as flat.
         warm = min(300, train_end_i - train_start_i)
         ctx = prices.iloc[test_start_i - warm : test_end_i]
         try:
@@ -193,12 +195,12 @@ def parameter_sensitivity(
     engine: BacktestEngine | None = None,
     metric: str = "sharpe",
 ) -> pd.DataFrame:
-    """Backtest every parameter combination. QA Section C.
+    """Backtest every parameter combination (QA Section C).
 
-    What you want to see is a broad plateau -- a whole neighbourhood of
-    parameters that all work. What should worry you is a lone spike: one setting
-    that shines while its immediate neighbours do not. Real edges are not that
-    fussy about whether the lookback is 250 or 255 days.
+    What we want to see is a broad plateau: a whole neighbourhood of parameters
+    that all work. What should worry us is a lone spike, one setting that shines
+    whilst its immediate neighbours do not. Real edges are not that fussy about
+    whether the lookback is 250 days or 255.
     """
     engine = engine or BacktestEngine()
     keys = list(param_grid)
@@ -220,7 +222,7 @@ def parameter_sensitivity(
 
 
 def sensitivity_verdict(sweep: pd.DataFrame, metric: str = "sharpe") -> dict:
-    """Turn a parameter sweep into a robustness judgement."""
+    """Turn a parameter sweep into a robustness judgement, with the reasoning attached."""
     vals = sweep[metric].dropna()
     if len(vals) < 3:
         return {"verdict": "insufficient", "detail": "Fewer than 3 successful runs."}
@@ -262,9 +264,10 @@ def sensitivity_verdict(sweep: pd.DataFrame, metric: str = "sharpe") -> dict:
 def split_regimes(benchmark_returns: pd.Series, vol_window: int = 63) -> pd.Series:
     """Label each date bull/bear x calm/volatile from the benchmark.
 
-    Deliberately crude and, importantly, causal: it uses trailing windows only,
-    so the labels are ones you could have known at the time. A regime classifier
-    that peeks at the full sample would flatter every strategy.
+    Deliberately crude and, more importantly, causal: it uses trailing windows
+    only, so the labels are ones we could have known at the time. A regime
+    classifier that peeks at the full sample would flatter every strategy it
+    touched, which defeats the purpose of splitting by regime in the first place.
     """
     eq = (1 + benchmark_returns).cumprod()
     trend = eq / eq.rolling(126, min_periods=30).mean() - 1
@@ -282,7 +285,7 @@ def split_regimes(benchmark_returns: pd.Series, vol_window: int = 63) -> pd.Seri
 
 
 def regime_performance(returns: pd.Series, regimes: pd.Series) -> pd.DataFrame:
-    """Performance broken out by regime. QA Section C."""
+    """Performance broken out by regime (QA Section C)."""
     idx = returns.index.intersection(regimes.index)
     r, g = returns.loc[idx], regimes.loc[idx]
     rows = []
@@ -324,7 +327,7 @@ def regime_verdict(table: pd.DataFrame) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Cost sensitivity -- QA Section G
+# Cost sensitivity (QA Section G)
 # ---------------------------------------------------------------------------
 
 def cost_sensitivity(
@@ -333,11 +336,11 @@ def cost_sensitivity(
     bps_levels: Sequence[float] = (0, 5, 10, 20, 40),
     config=None,
 ) -> pd.DataFrame:
-    """Re-run at escalating cost levels and find the break-even.
+    """Re-run at escalating cost levels and locate the break-even.
 
-    This directly answers Section G. If the Sharpe goes to zero somewhere
-    between 5 and 10 bps, you have a strategy that works only for someone with
-    better execution than you have.
+    This answers Section G directly: if the Sharpe falls to zero somewhere
+    between 5 and 10 bps, the strategy works only for someone whose execution is
+    better than ours, which is a fact about them and not about the edge.
     """
     from .costs import FixedBpsCost
     from .engine import BacktestConfig

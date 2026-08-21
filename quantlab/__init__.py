@@ -1,6 +1,16 @@
-"""quantlab -- an algorithmic trading research framework.
+"""quantlab: an algorithmic trading research framework organised around what it refuses to do.
 
-Implements the 5-layer system map:
+A backtest is not evidence; it is a hypothesis with a flattering chart attached. quantlab
+therefore couples every performance figure to the checks that qualify it: ``Pipeline.run()``
+hands back the equity curve and the QA report in one object, and it is the QA verdict, not the
+Sharpe ratio, that decides whether a result may inform a decision. Specifically, we refuse to
+(i) quote gross returns, since costs decide whether an edge survives, (ii) report a Sharpe
+ratio without the multiple-testing penalty the parameter search has already incurred, and
+(iii) pass a strategy tested on one sample, one regime, and one cost assumption. Failing
+numbers are still printed, in full: they simply arrive labelled as diagnostics rather than as
+results.
+
+The system is five layers, each testable on its own:
 
     Layer 1  Data        quantlab.data       prices, universe, integrity checks
     Layer 2  Research    quantlab.research   features, signals, strategies
@@ -32,7 +42,7 @@ __all__ = ["Pipeline", "PipelineConfig", "PipelineResult", "__version__"]
 
 
 def __getattr__(name):
-    """Lazy re-exports so `import quantlab` stays fast."""
+    """Lazy re-exports: ``import quantlab`` should not drag in every submodule at start-up."""
     mapping = {
         "BacktestEngine": ("quantlab.backtest.engine", "BacktestEngine"),
         "BacktestConfig": ("quantlab.backtest.engine", "BacktestConfig"),
