@@ -14,7 +14,7 @@ attached.** `Pipeline.run()` returns performance and the checklist verdict in th
 same object, and `qa.gate()` raises on any blocking failure. Looking at a Sharpe
 ratio here without also seeing whether it is trustworthy is deliberately awkward.
 
-Built by **Eugene (Yoogeun) Song** ([LinkedIn](https://www.linkedin.com/in/yoogeunsong))
+Built by [**Eugene (Yoogeun) Song**](https://www.linkedin.com/in/yoogeunsong) - a PhD researcher at Imperial College London -
 as an independent side project: a hobby, written in my own time, out of curiosity
 about how much of a backtest survives honest scrutiny.
 
