@@ -26,7 +26,7 @@ about how much of a backtest survives honest scrutiny.
 git clone https://github.com/eugeneyoogeunsong/quantlab.git
 cd quantlab
 pip install -e ".[dev]"
-pytest                    # 156 tests, fully offline
+pytest                    # 289 tests, fully offline
 ```
 
 Python 3.10+. Core dependencies: pandas, numpy, scipy, yfinance, pyarrow.
@@ -81,7 +81,7 @@ Two further modules sit alongside the five layers:
 
 | Module | Responsibility |
 |---|---|
-| `quantlab.derivatives` | Options pricing (analytic, lattice, PDE and Monte Carlo), plus implied volatility |
+| `quantlab.derivatives` | Options pricing (analytic, lattice, PDE and Monte Carlo), European and American, plus Greeks and implied volatility |
 | `quantlab.portfolio.optimisation` | Markowitz mean-variance with CAPM/EWMA inputs |
 
 The blueprint issues one warning above all others: most people fail because they
@@ -235,7 +235,7 @@ re-runs at escalating cost levels and reports the break-even.
 ## Tests
 
 ```bash
-pytest                    # 156 tests
+pytest                    # 289 tests
 pytest -m "not slow"      # skip the Monte Carlo null tests
 ```
 
@@ -287,17 +287,17 @@ quantlab/
 │   ├── pipeline.py    Wires all five layers together
 │   ├── report.py      Standalone HTML reports
 │   └── cli.py         backtest / compare / orders
-├── tests/             156 tests incl. null-hypothesis suite
+├── tests/             289 tests incl. null-hypothesis suite
 ├── docs/              QA_CHECKLIST.md, STRATEGIES.md, DERIVATIVES.md
 └── examples/
 ```
 
 ## Credits
 
-The derivatives pricing modules and the mean-variance optimiser are derived
-from **Adrian's** (`Adrian.ph689`) independent quantitative finance projects,
-contributed with permission. See [CREDITS.md](CREDITS.md) for the full
-attribution, what changed in the port, and references.
+The derivatives pricing modules and the mean-variance optimiser implement
+standard published methods. See [CREDITS.md](CREDITS.md) for the references each
+one follows, and for the barrier-convergence finding behind the trinomial
+lattice.
 
 ## Contributing
 
@@ -310,17 +310,16 @@ bug report. Open an issue.
 
 ## Author and copyright
 
-quantlab is written and maintained by **Eugene (Yoogeun) Song**
-([LinkedIn](https://www.linkedin.com/in/yoogeunsong)). It is an independent side
-project: a hobby, built in my own time and for my own curiosity, not work carried
-out for or on behalf of any employer, university, or client. Nothing in this
+quantlab is built by
+[**Eugene (Yoogeun) Song**](https://www.linkedin.com/in/yoogeunsong) - a PhD
+researcher at Imperial College London. It is an independent side project: a
+hobby, built in my own time and for my own curiosity, not work carried out for
+or on behalf of any employer, university, or client. Nothing in this
 repository represents the position of any institution I am affiliated with.
 
 Copyright © 2026 Eugene (Yoogeun) Song. Released under the
 [MIT License](LICENSE): use it, fork it, build on it, provided the copyright
-notice and permission notice travel with it. The derivatives pricing and
-mean-variance optimisation modules remain copyright © 2025 Adrian, contributed
-with permission under the same terms (see [CREDITS.md](CREDITS.md)).
+notice and permission notice travel with it.
 
 ## Disclaimer
 

@@ -10,8 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Eugene Song", email = "ygsong1004@gmail.com" },
-    { name = "Adrian" },
+    { name = "Eugene (Yoogeun) Song", email = "ygsong1004@gmail.com" },
 ]
 keywords = [
     "backtesting", "quantitative-finance", "algorithmic-trading",

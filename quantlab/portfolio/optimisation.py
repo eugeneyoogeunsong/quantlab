@@ -1,13 +1,12 @@
 # quantlab: Eugene (Yoogeun) Song (https://www.linkedin.com/in/yoogeunsong)
-# Ported from Adrian's (Adrian.ph689) independent work, used with permission;
-# see CREDITS.md. Independent side project. MIT licensed; see LICENSE.
+# Independent side project. MIT licensed; see LICENSE.
 
 """Layer 4: mean-variance optimisation (Markowitz MPT).
 
-Original implementation by Adrian (Adrian.ph689), 2025, from a study benchmarking
-CAPM- and EWMA-informed MPT portfolios against the S&P 500 and an equal-weight
-book over 2019-2023 with quarterly rebalancing. Refactored here into quantlab's
-Layer 4 interface; the estimators and objectives are unchanged.
+CAPM- and EWMA-informed mean-variance portfolios, benchmarked against the
+S&P 500 and an equal-weight book with quarterly rebalancing: Sharpe maximisation
+against variance minimisation on cumulative growth, drawdowns, turnover, and
+annual Sharpe.
 
 Where this sits
 ---------------
