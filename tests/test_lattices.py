@@ -58,36 +58,45 @@ def _err(price: float, exact: float) -> float:
 # ---------------------------------------------------------------------------
 
 def test_default_arguments_reproduce_pre_dividend_prices():
-    """Bit-for-bit regression lock on every pricer in the module.
+    """Regression lock on every pricer in the module.
 
     The literals below were captured from the implementation as it stood before
-    `q`, `method`, and the shared backward-induction engine existed. Equality is
-    exact rather than approximate on purpose: `r - 0.0` is exactly `r` in IEEE
-    754, so appending a dividend yield with a zero default cannot perturb the
-    arithmetic by even one unit in the last place, and if it has, the refactor
-    changed something it was not meant to touch.
+    `q`, `method`, and the shared backward-induction engine existed. They are
+    anchors against behavioural drift: any real change to the arithmetic moves a
+    lattice price in the fourth or fifth decimal at the latest, so a relative
+    tolerance of 1e-12 leaves three orders of magnitude of headroom and still
+    fails loudly on anything that matters.
+
+    The tolerance is not laziness about IEEE 754: `r - 0.0` is exactly `r`, so
+    appending a dividend yield with a zero default genuinely cannot perturb the
+    arithmetic. What it does allow for is the reduction order inside numpy's
+    vectorised sums, which depends on the numpy build and the machine's SIMD
+    width, and therefore differs in the last unit in the last place between the
+    Python versions in CI. Exact equality is still asserted where it is
+    meaningful, which is between two calls in the same process: see
+    `test_explicit_zero_yield_equals_the_default` below.
     """
-    assert binomial_european(S0, K, T, R, SIGMA, n_steps=50) == 6.060695891870758
-    assert binomial_european(S0, K, T, R, SIGMA, n_steps=501) == 6.03967386746722
-    assert binomial_european(S0, K, T, R, SIGMA, n_steps=500,
-                             option="put") == 10.677455962649905
-    assert binomial_european(S0, K, T, R, SIGMA) == 6.042219267573525
+    def lock(value, expected):
+        assert value == pytest.approx(expected, rel=1e-12)
 
-    assert binomial_american(S0, K, T, R, SIGMA, n_steps=500,
-                             option="put") == 11.974393469523198
-    assert binomial_american(90.0, 100.0, 0.75, 0.03, 0.35, n_steps=37,
-                             option="put") == 16.02316806100407
-    assert binomial_american(S0, K, T, R, SIGMA, n_steps=800,
-                             option="call") == 6.040890418014769
+    lock(binomial_european(S0, K, T, R, SIGMA, n_steps=50), 6.060695891870758)
+    lock(binomial_european(S0, K, T, R, SIGMA, n_steps=501), 6.03967386746722)
+    lock(binomial_european(S0, K, T, R, SIGMA, n_steps=500, option="put"), 10.677455962649905)
+    lock(binomial_european(S0, K, T, R, SIGMA), 6.042219267573525)
 
-    assert binomial_up_and_out(100.0, 95.0, 130.0, T, R, SIGMA) == 5.035596342518989
-    assert binomial_up_and_out(100.0, 95.0, 130.0, T, R, SIGMA,
-                               bgk_adjust=False) == 5.376486213653802
-    assert trinomial_up_and_out(100.0, 95.0, 130.0, T, R, SIGMA) == 5.147700941418595
+    lock(binomial_american(S0, K, T, R, SIGMA, n_steps=500, option="put"), 11.974393469523198)
+    lock(binomial_american(90.0, 100.0, 0.75, 0.03, 0.35, n_steps=37, option="put"),
+         16.02316806100407)
+    lock(binomial_american(S0, K, T, R, SIGMA, n_steps=800, option="call"), 6.040890418014769)
+
+    lock(binomial_up_and_out(100.0, 95.0, 130.0, T, R, SIGMA), 5.035596342518989)
+    lock(binomial_up_and_out(100.0, 95.0, 130.0, T, R, SIGMA, bgk_adjust=False),
+         5.376486213653802)
+    lock(trinomial_up_and_out(100.0, 95.0, 130.0, T, R, SIGMA), 5.147700941418595)
 
     stock, value, exercise = binomial_tree_full(S0, K, T, R, SIGMA, n_steps=6, option="put")
-    assert float(value[0, 0]) == 12.065701292622604
-    assert float(stock[6, 6]) == 61.26889167823924
+    lock(float(value[0, 0]), 12.065701292622604)
+    lock(float(stock[6, 6]), 61.26889167823924)
     assert int(exercise.sum()) == 9
 
 
