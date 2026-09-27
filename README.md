@@ -81,8 +81,8 @@ Two further modules sit alongside the five layers:
 
 | Module | Responsibility |
 |---|---|
-| `quantlab.derivatives` | Options pricing (analytic, lattice, PDE and Monte Carlo), European and American, plus Greeks and implied volatility |
-| `quantlab.portfolio.optimisation` | Markowitz mean-variance with CAPM/EWMA inputs |
+| `quantlab.pricing` | Option pricing: instruments, a Black-Scholes model, and four independent engines (analytic, lattice, PDE, Monte Carlo) that the test suite makes agree |
+| `quantlab.portfolio.meanvariance` | Markowitz mean-variance with Ledoit-Wolf and James-Stein shrinkage estimators |
 
 The blueprint issues one warning above all others: most people fail because they
 skip layers 3 to 5. That is precisely why layers 3, 4 and 5 are the largest part
@@ -280,24 +280,39 @@ quantlab/
 │   ├── data/          Layer 1 — loaders, universe, integrity checks
 │   ├── research/      Layer 2 — features, strategies
 │   ├── backtest/      Layer 3 — engine, costs, metrics, validation
-│   ├── portfolio/     Layer 4 — sizing, risk limits, mean-variance optimisation
+│   ├── portfolio/     Layer 4 — sizing, risk limits, mean-variance with shrinkage
 │   ├── execution/     Layer 5 — broker, monitoring
-│   ├── derivatives/   Options pricing — 4 independent methods + implied vol
+│   ├── pricing/       Options — instrument / model / engine, four engines
 │   ├── qa/            The checklist, executable
 │   ├── pipeline.py    Wires all five layers together
 │   ├── report.py      Standalone HTML reports
 │   └── cli.py         backtest / compare / orders
-├── tests/             289 tests incl. null-hypothesis suite
-├── docs/              QA_CHECKLIST.md, STRATEGIES.md, DERIVATIVES.md
+├── tests/             tests incl. null-hypothesis suite
+├── docs/              QA_CHECKLIST.md, STRATEGIES.md, PRICING.md
 └── examples/
 ```
 
-## Credits
+## Provenance of the pricing and mean-variance code
 
-The derivatives pricing modules and the mean-variance optimiser implement
-standard published methods. See [CREDITS.md](CREDITS.md) for the references each
-one follows, and for the barrier-convergence finding behind the trinomial
-lattice.
+An earlier iteration of this repository included option-pricing and
+mean-variance modules that were ports of
+[Adrian Phillips-Hernaez's](https://github.com/Adrian-pH) public scripts —
+his binomial, Black-Scholes, finite-difference, Monte Carlo and MPT projects
+from 2025. That code has been removed from the tree. It remains visible in the
+git history, as it should.
+
+`quantlab.pricing` and `quantlab.portfolio.meanvariance` are a rebuild, not a
+rewrite. They were written from Hull, Glasserman, Wilmott, and the papers cited
+in each module, with his files closed, and around a different decomposition —
+instrument / model / engine rather than a function per method. The two things
+they share with the old modules are the textbook formulas, which belong to no
+one, and the idea of pricing one contract four ways and demanding agreement,
+which I had already built the earlier test suite around.
+
+I had read his code before writing this, and I am not going to pretend
+otherwise. He deserves the credit for having a set of clean, working
+reference implementations I learned from. See [CREDITS.md](CREDITS.md) for the
+references and for the numerical findings that came out of the rebuild.
 
 ## Contributing
 

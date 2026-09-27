@@ -147,40 +147,38 @@ def kelly_fraction(returns: pd.Series, window: int = 252,
     return k.clip(0, cap).fillna(0.0)
 
 
-def mean_variance(signal_mask: pd.DataFrame, prices: pd.DataFrame,
-                  objective: str = "sharpe", inputs: str = "ewma",
-                  lookback: int = 252, max_weight: float = 0.40,
-                  **kwargs) -> pd.DataFrame:
-    """Markowitz mean-variance weights, restricted to the selected names.
+def optimised(signal_mask: pd.DataFrame, prices: pd.DataFrame,
+              objective: str = "min_variance", lookback: int = 252,
+              upper: float = 0.35, rebalance: str = "QE",
+              risk_aversion: float = 3.0, **_) -> pd.DataFrame:
+    """Mean-variance weights from `portfolio.meanvariance`, masked to the
+    strategy's selection.
 
-    Delegates to `portfolio.optimisation`. Unlike the heuristics above, this needs
-    an expected-return estimate, which is the least reliable input in quantitative
-    finance: read that module's docstring before trusting the output.
-
-    `objective='variance'` sidesteps the problem by ignoring expected returns
-    entirely, and historically tends to do better out of sample.
+    Uses Ledoit-Wolf covariance and, where a mean is needed, James-Stein
+    shrunk sample means -- the two estimators that stop the optimiser from
+    maximising estimation error. See that module for why this matters more
+    than the choice of objective.
     """
-    from .optimisation import MeanVarianceOptimiser
+    from .meanvariance import (JamesStein, LedoitWolf, MaxSharpe, MaxUtility,
+                               MeanVariance, MinVariance, RollingMeanVariance)
 
-    opt = MeanVarianceOptimiser(
-        lookback=lookback, objective=objective, inputs=inputs,
-        max_weight=max_weight,
-        **{k: v for k, v in kwargs.items()
-           if k in {"rebalance", "risk_free", "ewma_alpha", "min_weight"}},
-    )
-    raw = opt.generate_weights(prices)
-    # Respect the strategy's selection: zero out anything not signalled.
+    obj = {"min_variance": MinVariance(),
+           "mean_variance": MaxSharpe(),
+           "max_utility": MaxUtility(risk_aversion)}[objective]
+    mv = MeanVariance(obj, covariance=LedoitWolf(), expected_return=JamesStein(), upper=upper)
+    raw = RollingMeanVariance(mv, lookback=lookback, rebalance=rebalance).generate_weights(prices)
     masked = raw.where(signal_mask.astype(bool), 0.0)
     total = masked.sum(axis=1)
     return masked.div(total.replace(0, np.nan), axis=0).fillna(0.0)
 
 
 SIZERS = {
-    "equal_weight": "equal_weight",
-    "inverse_vol": "inverse_volatility",
-    "risk_parity": "risk_parity",
-    "mean_variance": "mean_variance",
-    "min_variance": "mean_variance (objective='variance')",
+    "equal_weight": "1/N across selected names",
+    "inverse_vol": "weight proportional to 1/volatility",
+    "risk_parity": "equal risk contribution",
+    "min_variance": "Markowitz min-variance, Ledoit-Wolf covariance",
+    "mean_variance": "Markowitz max-Sharpe, Ledoit-Wolf + James-Stein inputs",
+    "max_utility": "Markowitz quadratic utility, risk_aversion parameter",
 }
 
 
@@ -193,8 +191,6 @@ def apply_sizing(signal_mask: pd.DataFrame, prices: pd.DataFrame,
         return inverse_volatility(signal_mask, prices, **kwargs)
     if method == "risk_parity":
         return risk_parity(signal_mask, prices, **kwargs)
-    if method == "mean_variance":
-        return mean_variance(signal_mask, prices, objective="sharpe", **kwargs)
-    if method == "min_variance":
-        return mean_variance(signal_mask, prices, objective="variance", **kwargs)
+    if method in ("min_variance", "mean_variance", "max_utility"):
+        return optimised(signal_mask, prices, objective=method, **kwargs)
     raise KeyError(f"Unknown sizing method {method!r}. Available: {sorted(SIZERS)}")

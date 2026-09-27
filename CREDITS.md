@@ -1,126 +1,110 @@
-# Credits
+# Credits and references
 
-The derivatives pricing and mean-variance optimisation modules implement standard,
-published methods. This file records which sources each one follows, plus the two
-implementation decisions that are not obvious from the papers.
+## Provenance
 
-## Implementation notes
+An earlier iteration of this repository ported
+[Adrian Phillips-Hernaez's](https://github.com/Adrian-pH) public option-pricing
+and portfolio-optimisation scripts (2025) into quantlab. That code was removed
+and the two packages below rebuilt from the sources listed here, with a
+different architecture. The README carries the full statement. His original
+repositories:
 
-The formulas are textbook; the choices around them are not, and each was made for
-a stated reason:
+- American-European-Option-Binomial-Model
+- Black-Scholes-Implied-Volatility-Calculator
+- Evaluation-of-Numerical-Methods-for-Pricing-European-Calls
+- Evaluation-of-Numerical-Methods-for-Pricing-Up-and-Out-Calls
+- Portfolio-Analysis-using-MPT-and-CAPM-Informed-Inputs
 
-- Monte Carlo is vectorised across paths rather than looped path by path (roughly
-  100x faster for the same arithmetic), with optional antithetic variates and a
-  reported standard error.
-- The finite-difference solver uses a banded tridiagonal solve rather than a dense
-  `np.linalg.solve`: identical arithmetic, O(n) instead of O(n³) per timestep.
-- Implied volatility falls back to bisection in the deep ITM/OTM cases where vega
-  collapses and Newton-Raphson diverges: slower, but it cannot fail on a bracketed
-  root.
-- `trinomial_up_and_out` (Ritchken 1995) exists because the binomial barrier price
-  does not converge cleanly (see below).
+## `quantlab.pricing`
 
-## One substantive numerical finding
+The design — a contract, a model, and an engine as three separate objects —
+follows the way Hull organises the material and the way QuantLib organises
+its code.
 
-Testing found that the binomial barrier pricer converges non-monotonically: error
-against the closed form moved 1.2e-1 → 1.4e-2 → 2.7e-2 as steps went 500 → 2000 →
-5000.
+| Component | Source |
+|---|---|
+| Black-Scholes-Merton via the forward, Greeks | Hull, *Options, Futures, and Other Derivatives*, Ch. 15, 17, 19 |
+| Cash-or-nothing digitals | Hull, Ch. 26 |
+| Barrier options by in-out parity from knock-in closed forms | Hull, Ch. 26, presenting Reiner & Rubinstein (1991) |
+| Cox-Ross-Rubinstein lattice | Cox, Ross & Rubinstein (1979); Hull, Ch. 21 |
+| Jarrow-Rudd equal-probability lattice | Jarrow & Rudd (1983) |
+| Tian three-moment lattice | Tian (1993) |
+| Leisen-Reimer lattice, Peizer-Pratt inversion | Leisen & Reimer (1996) |
+| Stretched trinomial for barriers | Ritchken (1995) |
+| Continuity correction (kept as an option, off by default) | Broadie, Glasserman & Kou (1997) |
+| Theta-scheme finite differences, boundary conditions | Wilmott, *Paul Wilmott on Quantitative Finance*, Ch. 77 |
+| Projected SOR for the American LCP | Wilmott, Ch. 78 |
+| Implicit start-up steps to damp Crank-Nicolson ringing | Rannacher (1984) |
+| Exact lognormal path generation | Glasserman, *Monte Carlo Methods in Financial Engineering*, Ch. 3 |
+| Antithetic variates, control variates | Glasserman, Ch. 4; Hull, Ch. 21 |
+| Brownian-bridge barrier crossing probability | Glasserman, Ch. 6.4 |
+| Pathwise and likelihood-ratio Greeks | Glasserman, Ch. 7 |
+| Longstaff-Schwartz least-squares Monte Carlo | Longstaff & Schwartz (2001); Glasserman, Ch. 8.6 |
+| Brent's method for implied volatility | Brent (1973); Hull, Ch. 20 |
 
-The cause is structural rather than a coding error. A CRR lattice can only take
-values `S0·u^k`, the barrier generally falls between two of them, and changing the
-step count moves that misalignment erratically. Aligning the barrier by setting
-`u = (B/S0)^(1/m)` fixes the placement but shifts the lattice's effective
-volatility by ~1%, which does comparable damage. Two branches cannot satisfy both
-constraints at once.
+## `quantlab.portfolio.meanvariance`
 
-Ritchken's stretched trinomial tree adds a third branch and therefore the missing
-degree of freedom, matching mean, variance and barrier position simultaneously. It
-converges smoothly (1.1e-2 → 4.3e-3 → 2.8e-3 → 1.1e-3 → 7.0e-4 over the same step
-counts).
+| Component | Source |
+|---|---|
+| Mean-variance optimisation | Markowitz (1952) |
+| Constant-correlation covariance shrinkage, analytic intensity | Ledoit & Wolf (2003), "Honey, I shrunk the sample covariance matrix" |
+| Bayes-Stein shrinkage of expected returns | Jorion (1986) |
+| CAPM-implied expected returns | Sharpe (1964) |
+| EWMA covariance, half-life parameterisation | J.P. Morgan/Reuters, *RiskMetrics Technical Document* (1996) |
+| Why any of this is needed | DeMiguel, Garlappi & Uppal (2009), "Optimal versus naive diversification" |
 
-`binomial_up_and_out` is retained, since the comparison between the two lattices is
-worth keeping visible, with the limitation documented in its docstring, the
-Broadie-Glasserman-Kou continuity correction applied, and a floating-point issue
-fixed in the barrier comparison. `trinomial_up_and_out` is the recommended lattice
-method.
+## Numerical findings made during the rebuild
 
----
+Three things the test suite turned up that are worth knowing if you use this
+code.
 
-## References
+**An aligned trinomial does not want a continuity correction.** The
+Broadie-Glasserman-Kou shift compensates for a barrier that is observed only
+at discrete times while the underlying moves continuously. A Ritchken lattice
+with a node layer sitting exactly on the barrier has no such gap — a path
+cannot reach the far side without landing on the barrier node — so the
+monitoring is already effectively continuous. Applying the shift anyway biases
+the price low: error 3.1e-1 at 250 steps with the correction versus 1.1e-2
+without, and still 7.4e-2 versus 7.0e-4 at 4000 steps. The correction is
+retained as a flag for experimentation and defaults to off.
 
-Formulas and methods implemented here come from the following standard sources.
+**Richardson extrapolation helps Leisen-Reimer and hurts CRR and
+Jarrow-Rudd.** Extrapolation assumes a smooth error in the step size.
+Leisen-Reimer's is (it centres the tree on the strike); CRR's and Jarrow-Rudd's
+oscillate as the strike drifts between node layers, and extrapolating an
+oscillation amplifies it. Measured at 201 steps on a vanilla call: Jarrow-Rudd
+1.4e-3 → 3.6e-3, CRR 3.5e-3 → 5.2e-3; Leisen-Reimer at 51 steps 1.4e-4 →
+7.1e-5.
 
-- Black, F. & Scholes, M. (1973). The Pricing of Options and Corporate
-  Liabilities. *Journal of Political Economy*, 81(3).
-- Merton, R. C. (1973). Theory of Rational Option Pricing. *Bell Journal of
-  Economics and Management Science*, 4(1).
-- Cox, J., Ross, S. & Rubinstein, M. (1979). Option Pricing: A Simplified
-  Approach. *Journal of Financial Economics*, 7(3).
-- Jarrow, R. A. & Rudd, A. (1983). *Option Pricing*. Irwin. (The
-  equal-probability tree.)
-- Tian, Y. (1993). A Modified Lattice Approach to Option Pricing. *Journal of
-  Futures Markets*, 13(5).
-- Leisen, D. P. J. & Reimer, M. (1996). Binomial Models for Option Valuation:
-  Examining and Improving Convergence. *Applied Mathematical Finance*, 3(4).
-- Peizer, D. B. & Pratt, J. W. (1968). A Normal Approximation for Binomial, F,
-  Beta, and Other Common, Related Tail Probabilities, I. *Journal of the
-  American Statistical Association*, 63(324). (The normal-to-binomial inversion
-  Leisen and Reimer build on.)
-- Hull, J. C. *Options, Futures, and Other Derivatives*. Pearson. (Greeks read
-  off the tree nodes, and the dividend-yield adjustment.)
-- Boyle, P. & Lau, S. H. (1994). Bumping Up Against the Barrier with the
-  Binomial Method. *Journal of Derivatives*, 1(4).
-- Ritchken, P. (1995). On Pricing Barrier Options. *Journal of Derivatives*,
-  3(2).
-- Broadie, M., Glasserman, P. & Kou, S. (1997). A Continuity Correction for
-  Discrete Barrier Options. *Mathematical Finance*, 7(4).
-- Rannacher, R. (1984). Finite Element Solution of Diffusion Problems with
-  Irregular Data. *Numerische Mathematik*, 43.
-- Brennan, M. J. & Schwartz, E. S. (1977). The Valuation of American Put
-  Options. *Journal of Finance*, 32(2). (The first finite-difference treatment
-  of the early-exercise boundary.)
-- Cryer, C. W. (1971). The Solution of a Quadratic Programming Problem Using
-  Systematic Overrelaxation. *SIAM Journal on Control*, 9(3). (Projected SOR
-  and its convergence.)
-- Jaillet, P., Lamberton, D. & Lapeyre, B. (1990). Variational Inequalities and
-  the Pricing of American Options. *Acta Applicandae Mathematicae*, 21(3). (The
-  equivalence of the optimal-stopping and linear-complementarity formulations.)
-- Shreve, S. E. (2004). *Stochastic Calculus for Finance I: The Binomial Asset
-  Pricing Model*. Springer.
-- Wilmott, P. (2007). *Paul Wilmott Introduces Quantitative Finance*, 2nd ed.
-  Wiley.
-- Shreve, S. E. (2004). *Stochastic Calculus for Finance II: Continuous-Time
-  Models*. Springer.
-- Reiner, E. & Rubinstein, M. (1991). Breaking Down the Barriers. *Risk*, 4(8).
-  (The closed-form barrier family, with cost of carry.)
-- Haug, E. G. (2007). *The Complete Guide to Option Pricing Formulas*, 2nd ed.
-  McGraw-Hill. (Second-order Greeks: vanna, volga and charm.)
-- Brenner, M. & Subrahmanyam, M. G. (1988). A Simple Formula to Compute the
-  Implied Standard Deviation. *Financial Analysts Journal*, 44(5).
-- Manaster, S. & Koehler, G. (1982). The Calculation of Implied Variances from
-  the Black-Scholes Model: A Note. *Journal of Finance*, 37(1). (The
-  vega-maximising starting point for the Newton inversion.)
-- Boyle, P. P. (1977). Options: A Monte Carlo Approach. *Journal of Financial
-  Economics*, 4(3).
-- Glasserman, P. (2004). *Monte Carlo Methods in Financial Engineering*.
-  Springer. (Variance reduction Ch. 4, quasi-Monte Carlo Ch. 5, pathwise and
-  likelihood-ratio Greeks Ch. 7, American pricing Ch. 8.)
-- Longstaff, F. A. & Schwartz, E. S. (2001). Valuing American Options by
-  Simulation: A Simple Least-Squares Approach. *Review of Financial Studies*,
-  14(1).
-- McDonald, R. L. & Schroder, M. D. (1998). A Parity Result for American
-  Options. *Journal of Computational Finance*, 1(3).
-- Sobol', I. M. (1967). On the Distribution of Points in a Cube and the
-  Approximate Evaluation of Integrals. *USSR Computational Mathematics and
-  Mathematical Physics*, 7(4).
-- Owen, A. B. (1997). Scrambled Net Variance for Integrals of Smooth Functions.
-  *Annals of Statistics*, 25(4).
-- Markowitz, H. (1952). Portfolio Selection. *Journal of Finance*, 7(1).
-- Sharpe, W. F. (1964). Capital Asset Prices. *Journal of Finance*, 19(3).
-- Michaud, R. O. (1989). The Markowitz Optimization Enigma: Is 'Optimized'
-  Optimal? *Financial Analysts Journal*, 45(1).
-- J.P. Morgan/Reuters (1996). *RiskMetrics Technical Document*, 4th ed.
-  (EWMA covariance estimation.)
+**Antithetic samples are pairs, and the standard error has to know that.**
+Treating 2m antithetic draws as 2m independent observations reports a standard
+error that ignores the variance reduction entirely — the test asserting
+`antithetic SE < plain SE` failed on exactly this. The estimator now averages
+within each pair and takes the standard error over the m pair-means
+(Glasserman, Ch. 4.2).
+
+## Bibliography
+
+- Black, F. & Scholes, M. (1973). The Pricing of Options and Corporate Liabilities. *J. Political Economy* 81(3).
+- Brent, R. P. (1973). *Algorithms for Minimization without Derivatives*. Prentice-Hall.
+- Broadie, M., Glasserman, P. & Kou, S. (1997). A Continuity Correction for Discrete Barrier Options. *Mathematical Finance* 7(4).
+- Cox, J., Ross, S. & Rubinstein, M. (1979). Option Pricing: A Simplified Approach. *J. Financial Economics* 7(3).
+- DeMiguel, V., Garlappi, L. & Uppal, R. (2009). Optimal versus Naive Diversification. *Review of Financial Studies* 22(5).
+- Glasserman, P. (2003). *Monte Carlo Methods in Financial Engineering*. Springer.
+- Hull, J. C. (2022). *Options, Futures, and Other Derivatives*, 11th ed. Pearson.
+- Jarrow, R. & Rudd, A. (1983). *Option Pricing*. Irwin.
+- Jorion, P. (1986). Bayes-Stein Estimation for Portfolio Analysis. *J. Financial and Quantitative Analysis* 21(3).
+- Ledoit, O. & Wolf, M. (2003). Honey, I Shrunk the Sample Covariance Matrix. *J. Portfolio Management* 30(4).
+- Leisen, D. & Reimer, M. (1996). Binomial Models for Option Valuation — Examining and Improving Convergence. *Applied Mathematical Finance* 3(4).
+- Longstaff, F. & Schwartz, E. (2001). Valuing American Options by Simulation. *Review of Financial Studies* 14(1).
+- Markowitz, H. (1952). Portfolio Selection. *J. Finance* 7(1).
+- Merton, R. C. (1973). Theory of Rational Option Pricing. *Bell J. Economics* 4(1).
+- Rannacher, R. (1984). Finite Element Solution of Diffusion Problems with Irregular Data. *Numerische Mathematik* 43.
+- Reiner, E. & Rubinstein, M. (1991). Breaking Down the Barriers. *Risk* 4(8).
+- Ritchken, P. (1995). On Pricing Barrier Options. *J. Derivatives* 3(2).
+- Sharpe, W. F. (1964). Capital Asset Prices. *J. Finance* 19(3).
+- Tian, Y. (1993). A Modified Lattice Approach to Option Pricing. *J. Futures Markets* 13(5).
+- Wilmott, P. (2006). *Paul Wilmott on Quantitative Finance*, 2nd ed. Wiley.
 
 The factor strategies in `quantlab/research/strategies.py` carry their own
 citations in code and in `docs/STRATEGIES.md`.
